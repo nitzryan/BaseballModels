@@ -1,0 +1,7 @@
+*.db
+*.db-shm
+*.db-wal
+/x64
+/x86
+/.vs
+*.user
