@@ -5,8 +5,9 @@
 
 int Database::intResult = 0;
 int Database::currentRow = 0;
-HitterData* Database::data = NULL;
-HitterStats* Database::stats = NULL;
+HitterData* Database::data = nullptr;
+HitterStats* Database::stats = nullptr;
+HitterValue* Database::value = nullptr;
 
 Database::Database(const char* filename)
 {
@@ -42,12 +43,12 @@ void Database::GetData(HitterData** hd, int* lenData, HitterStats** hs, int* len
 	rc = sqlite3_exec(db, "SELECT * FROM Model_HitterStats ORDER BY mlbId ASC, Year ASC, Month ASC", Database::CallbackHitterStats, nullptr, &zErrMsg);
 	*hs = Database::stats;
 
-	/*rc = sqlite3_exec(db, "SELECT COUNT(*) FROM Model_PlayerWar WHERE isHitter='1'", Database::CallbackInt, nullptr, &zErrMsg);
+	rc = sqlite3_exec(db, "SELECT COUNT(*) FROM Model_PlayerWar WHERE isHitter='1'", Database::CallbackInt, nullptr, &zErrMsg);
 	Database::value = (HitterValue*)malloc(Database::intResult * sizeof(HitterValue));
 	*lenValue = Database::intResult;
 	Database::currentRow = 0;
 	rc = sqlite3_exec(db, "SELECT * FROM Model_PlayerWar WHERE isHitter='1' ORDER BY mlbID ASC, Year ASC", Database::CallbackHitterValue, nullptr, &zErrMsg);
-	*hv = Database::value;*/
+	*hv = Database::value;
 }
 
 int Database::CallbackInt(void* param, int argc, char** argv, char** azColName)
@@ -75,15 +76,15 @@ int Database::CallbackHitterData(void* param, int argc, char** argv, char** azCo
 		draftPick = 0;
 	}
 
-	HitterData* d = &Database::data[Database::currentRow];
-	d->mlbId = mlbId;
-	d->ageAtSigning = ageAtSigning;
-	d->draftPick = draftPick;
-	d->wasDrafted = wasDrafted;
-	d->lenStats = 0;
-	d->lenValue = 0;
-	d->statsIdx = 0;
-	d->valueIdx = 0;
+	HitterData& d = Database::data[Database::currentRow];
+	d.mlbId = mlbId;
+	d.ageAtSigning = ageAtSigning;
+	d.draftPick = draftPick;
+	d.wasDrafted = wasDrafted;
+	d.lenStats = 0;
+	d.lenValue = 0;
+	d.statsIdx = 0;
+	d.valueIdx = 0;
 
 	Database::currentRow++;
 	return 0;
@@ -142,6 +143,28 @@ int Database::CallbackHitterStats(void* param, int argc, char** argv, char** azC
 
 int Database::CallbackHitterValue(void* param, int argc, char** argv, char** azColName)
 {
+	int mlbId = atoi(argv[0]);
+	// Look to see if this result exists in HitterData
+	int idx = 0;
+	while (true) {
+		int hitterIdx = Database::data[idx].mlbId;
+		if (hitterIdx == mlbId) { // Not the first entry for this player
+			if (Database::data[idx].lenValue == 0) {
+				Database::data[idx].valueIdx = Database::currentRow;
+			}
+			Database::data[idx].lenValue += 1;
+			break;
+		}
+		idx++;
+	}
+
+	HitterValue& hv = value[Database::currentRow];
+	hv.pa = atof(argv[3]);
+	hv.war = atof(argv[4]);
+	hv.off = atof(argv[5]);
+	hv.def = atof(argv[6]);
+	hv.bsr = atof(argv[7]);
+
 	Database::currentRow++;
 	return 0;
 }

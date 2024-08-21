@@ -24,8 +24,11 @@ __host__ void ReadDatabaseFile(const char* dbName) {
     db.GetData(&data, &lenData, &stats, &lenStats, &value, &lenValue);
     for (int i = 0; i < lenData; i++) {
         printf("Id=%d, Draft Pick=%.0f Age=%.1f LenStats=%d\n", data[i].mlbId, data[i].draftPick, data[i].ageAtSigning, data[i].lenStats);
-        for (int j = data[i].statsIdx; j < data[i].statsIdx + data[i].lenStats; j++) {
+        /*for (int j = data[i].statsIdx; j < data[i].statsIdx + data[i].lenStats; j++) {
             printf("\tMonth=%.0f, Age=%.1f, Pa=%.0f, avgRatio=%.2f\n", stats[j].month, stats[j].age, stats[j].pa, stats[j].avgRatio);
+        }*/
+        for (int j = data[i].valueIdx; j < data[i].valueIdx + data[i].lenValue; j++) {
+            printf("\t\tPa=%.0f WAR=%.1f Off=%.1f Def=%.1f Bsr=%.1f\n", value[j].pa, value[j].war, value[j].off, value[j].def, value[j].bsr);
         }
     }
     if (data != nullptr)

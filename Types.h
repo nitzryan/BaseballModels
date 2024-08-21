@@ -39,7 +39,7 @@ struct HitterStats {
 };
 
 struct HitterValue {
-    int pa;
+    float pa;
     float war;
     float off;
     float def;
