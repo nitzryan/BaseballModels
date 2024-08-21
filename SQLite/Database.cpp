@@ -112,8 +112,8 @@ int Database::CallbackHitterStats(void* param, int argc, char** argv, char** azC
 
 	HitterStats& hs = stats[Database::currentRow];
 	hs.month = atof(argv[2]);
-	hs.pa = atof(argv[3]);
-	hs.age = atof(argv[4]);
+	hs.age = atof(argv[3]);
+	hs.pa = atof(argv[4]);
 	hs.level = atof(argv[5]);
 	hs.parkRunFactor = atof(argv[6]);
 	hs.parkHrFactor = atof(argv[7]);

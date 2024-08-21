@@ -18,18 +18,22 @@ __global__ void addKernel(int *c, const int *a, const int *b)
 __host__ void ReadDatabaseFile(const char* dbName) {
     Database db(dbName);
     int lenData, lenStats, lenValue;
-    HitterData* data;
-    HitterStats* stats;
-    HitterValue* value;
+    HitterData* data = nullptr;
+    HitterStats* stats = nullptr;
+    HitterValue* value = nullptr;
     db.GetData(&data, &lenData, &stats, &lenStats, &value, &lenValue);
     for (int i = 0; i < lenData; i++) {
         printf("Id=%d, Draft Pick=%.0f Age=%.1f LenStats=%d\n", data[i].mlbId, data[i].draftPick, data[i].ageAtSigning, data[i].lenStats);
         for (int j = data[i].statsIdx; j < data[i].statsIdx + data[i].lenStats; j++) {
-            printf("\tMonth=%d, Age=%.1f, Pa=%.0f, avgRatio=%.2f\n", stats[j].month, stats[j].age, stats[j].pa, stats[j].avgRatio);
+            printf("\tMonth=%.0f, Age=%.1f, Pa=%.0f, avgRatio=%.2f\n", stats[j].month, stats[j].age, stats[j].pa, stats[j].avgRatio);
         }
     }
-    delete data;
-    delete stats;
+    if (data != nullptr)
+        delete data;
+    if (stats != nullptr)
+        delete stats;
+    if (value != nullptr)
+        delete value;
     printf("Goodbye\n");
 }
 
@@ -54,7 +58,7 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
         goto Error;
     }
 
-    // Allocate GPU buffers for three vectors (two input, one output)    .
+    // Allocate GPU buffers for three vectors (two input, one output)
     cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
