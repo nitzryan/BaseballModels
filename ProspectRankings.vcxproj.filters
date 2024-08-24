@@ -7,6 +7,9 @@
     <Filter Include="SQLite">
       <UniqueIdentifier>{65c294ed-5bbb-488f-bddc-d5cee523cc46}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NN">
+      <UniqueIdentifier>{b2ba25b8-c77f-48f5-acb4-4b22f912df2b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SQLite\sqlite3.c">
@@ -14,6 +17,9 @@
     </ClCompile>
     <ClCompile Include="SQLite\Database.cpp">
       <Filter>SQLite</Filter>
+    </ClCompile>
+    <ClCompile Include="NN\Network.cpp">
+      <Filter>NN</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -24,5 +30,8 @@
       <Filter>SQLite</Filter>
     </ClInclude>
     <ClInclude Include="Types.h" />
+    <ClInclude Include="NN\Network.h">
+      <Filter>NN</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

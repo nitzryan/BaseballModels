@@ -80,10 +80,12 @@
     <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="NN\Network.cpp" />
     <ClCompile Include="SQLite\Database.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="NN\Network.h" />
     <ClInclude Include="SQLite\Database.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="Types.h" />
