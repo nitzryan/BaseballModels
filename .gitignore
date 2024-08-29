@@ -6,3 +6,11 @@
 /.vs
 *.user
 /errors
+*.pt
+*.cu
+/NN
+/SQLite
+*.h
+*.sln
+*.vcxproj
+*.vcxproj.filters
