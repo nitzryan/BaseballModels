@@ -14,3 +14,6 @@
 *.sln
 *.vcxproj
 *.vcxproj.filters
+**/__pycache__
+*.bak
+*.pyc
