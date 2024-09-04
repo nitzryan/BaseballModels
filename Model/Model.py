@@ -19,7 +19,7 @@ class RNN_Model(nn.Module):
         
     def forward(self, x, lengths):
         if self.training:
-            x += self.mutators[:x.size(0), :, :]
+            x += self.mutators[:x.size(0), :x.size(1), :]
         lengths = lengths.to(torch.device("cpu")).long()
         packedInput = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
         packedOutput, (h_n, c_n) = self.rnn(packedInput)
