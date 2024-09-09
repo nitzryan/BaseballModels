@@ -44,15 +44,17 @@ def logResults(epoch, num_epochs, train_loss, train_loss_history, test_loss, tes
   test_loss_history.append(test_loss)
   epoch_counter.append(epoch)
 
-def graphLoss(epoch_counter, train_loss_hist, test_loss_hist, loss_name="Loss", start = 0):
+def graphLoss(epoch_counter, train_loss_hist, test_loss_hist, loss_name="Loss", start = 0, graph_y_range=None):
   fig = plt.figure()
   plt.plot(epoch_counter[start:], train_loss_hist[start:], color='blue')
   plt.plot(epoch_counter[start:], test_loss_hist[start:], color='red')
+  if graph_y_range is not None:
+    plt.ylim(graph_y_range)
   plt.legend(['Train Loss', 'Test Loss'], loc='upper right')
   plt.xlabel('#Epochs')
   plt.ylabel(loss_name)
 
-def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, logging_interval=1, early_stopping_cutoff=20, should_output=True):
+def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, logging_interval=1, early_stopping_cutoff=20, should_output=True, graph_y_range=None):
   #Arrays to store training history
   test_loss_history = []
   epoch_counter = []
@@ -62,7 +64,10 @@ def trainAndGraph(network, training_generator, testing_generator, loss_function,
   best_epoch = 0
   epochsSinceLastImprove = 0
   
-  for epoch in tqdm(range(num_epochs), leave=False, desc="Training"):
+  iterable = range(num_epochs)
+  if not should_output:
+    iterable = tqdm(iterable, leave=False, desc="Training")
+  for epoch in iterable:
     avg_loss = train(network, training_generator, loss_function, optimizer, should_output=should_output)
     test_loss = test(network, testing_generator, loss_function)
     scheduler.step(test_loss)
@@ -85,5 +90,5 @@ def trainAndGraph(network, training_generator, testing_generator, loss_function,
   if should_output:
     print(f"Best result at epoch={best_epoch} with loss={best_loss}")
 
-    graphLoss(epoch_counter, train_loss_history, test_loss_history)
+    graphLoss(epoch_counter, train_loss_history, test_loss_history, graph_y_range=graph_y_range)
   return best_loss
