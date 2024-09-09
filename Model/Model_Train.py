@@ -7,17 +7,18 @@ def train(network,  data_generator, loss_function, optimizer, logging = 200, sho
   network.train() #updates any network layers that behave differently in training and execution
   avg_loss = 0
   num_batches = 0
-  for batch, (input_data, input_length, target_output) in enumerate(data_generator):
-    input_data, target_output = input_data.to(device), target_output.to(device) #Move tensor to GPU
-    input_length = input_length.to(device)
-    optimizer.zero_grad()                            # Gradients need to be reset each batch
-    prediction = network(input_data, input_length)                 # Forward pass: compute the output class given a image
-    loss = loss_function(prediction, target_output, input_length)  # Compute the loss: difference between the output and correct result
-    loss.backward()                                  # Backward pass: compute the gradients of the model with respect to the loss
+  for batch, (data, length, target_war, target_level) in enumerate(data_generator):
+    data, length = data.to(device), length.to(device)
+    target_war, target_level = target_war.to(device), target_level.to(device)
+    optimizer.zero_grad()
+    output_war, output_level = network(data, length)
+    loss_war, loss_level = loss_function(output_war, output_level, target_war, target_level, length)
+    loss_war.backward(retain_graph=True)
+    loss_level.backward()
     optimizer.step()
-    avg_loss += loss.item()
+    avg_loss += loss_war.item()
     num_batches += 1
-    if should_output and ((batch+1)%logging == 0): print('Batch [%d/%d], Train Loss: %.4f' %(batch+1, len(data_generator.dataset)/len(target_output), avg_loss/num_batches))
+    if should_output and ((batch+1)%logging == 0): print('Batch [%d/%d], Train Loss: %.4f' %(batch+1, len(data_generator.dataset)/len(output_war), avg_loss/num_batches))
   return avg_loss/num_batches
 
 def test(network, test_loader, loss_function):
@@ -25,10 +26,12 @@ def test(network, test_loader, loss_function):
   test_loss = 0
   num_batches = 0
   with torch.no_grad():
-    for data, length, target in test_loader:
-      data, length, target = data.to(device), length.to(device), target.to(device)
-      output = network(data, length)
-      test_loss += loss_function(output, target, length).item()
+    for data, length, target_war, target_level in test_loader:
+      data, length = data.to(device), length.to(device)
+      target_war, target_level = target_war.to(device), target_level.to(device)
+      output_war, output_level = network(data, length)
+      loss_war, loss_level = loss_function(output_war, output_level, target_war, target_level, length)
+      test_loss += loss_war.item()
       num_batches += 1
   test_loss /= num_batches
   #print('\nTest set: Avg. loss: {:.4f})\n'.format(test_loss))

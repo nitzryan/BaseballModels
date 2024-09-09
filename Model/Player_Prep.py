@@ -91,7 +91,7 @@ hitter_person_query = "AGE, PA, Level"
 hitter_table = "Model_HitterStats"
 pitcher_table = "Model_PitcherStats"
 
-HITTER_OUTPUT_COLS = 1
+HITTER_OUTPUT_COLS = 2
 
 def Generate_Pca(query, table, num_components):
     global db
@@ -168,9 +168,9 @@ def Generate_Hitters(
         # out = torch.tensor([levelMap[highestLevel]], dtype=D_TYPE)
         if pa is None:
             # out = (torch.tensor([levelMap[highestLevel], 0, 0, 0, 0, 0], dtype=D_TYPE))
-            out = torch.tensor([0], dtype=D_TYPE)
+            out = torch.tensor([0, levelMap[highestLevel]], dtype=D_TYPE)
         else:
-            out = (torch.tensor([war], dtype=D_TYPE))
+            out = (torch.tensor([war, levelMap[highestLevel]], dtype=D_TYPE))
             
         for i in range(thisOutputs.size(0)):
             thisOutputs[i] = out
