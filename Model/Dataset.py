@@ -3,7 +3,7 @@ import numpy as np
 from Constants import D_TYPE
 import warnings
 
-WAR_BUCKETS = torch.tensor([0,1,5,10,15,20,np.inf], dtype=D_TYPE)
+WAR_BUCKETS = torch.tensor([0,1,5,10,20,30,np.inf], dtype=D_TYPE)
 LEVEL_BUCKETS = torch.tensor([0,1,2,3,4,5,6, np.inf], dtype=D_TYPE)
 PA_BUCKETS = torch.tensor([0, 50, 200, 1000, 2000, np.inf], dtype=D_TYPE)
 

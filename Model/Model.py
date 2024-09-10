@@ -29,7 +29,7 @@ class RNN_Model(nn.Module):
         packedInput = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
         
         # Generate Player State
-        packedOutput, (h_n, c_n) = self.rnn(packedInput)
+        packedOutput, h_n = self.rnn(packedInput)
         output, _ = nn.utils.rnn.pad_packed_sequence(packedOutput, batch_first=True)
             
         # Generate War predictions

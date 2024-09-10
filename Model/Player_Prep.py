@@ -101,6 +101,76 @@ def Generate_Pca(query, table, num_components):
     pca_std_devs = Generate_StdDev_Ratio(pca_model.explained_variance_ratio_)
     return scaler, pca_model, pca_std_devs
 
+_pca_fielding = None
+_pca_hitting = None
+_pca_stealing = None
+_pca_parkfactors = None
+_pca_person = None
+_scaler_fielding = None
+_scaler_hitting = None
+_scaler_stealing = None
+_scaler_parkfactors = None
+_scaler_person = None
+_hitter_cols = 0
+
+def Transform_Hitter(hitter_data):
+    id, signingAge, draftPick = hitter_data
+    fielding_stats_df = pd.read_sql_query(f"SELECT {fielding_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    hitting_stats_df = pd.read_sql_query(f"SELECT {hitting_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    stealing_stats_df = pd.read_sql_query(f"SELECT {stealing_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    parkfactor_stats_df = pd.read_sql_query(f"SELECT {park_factors_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    player_stats_df = pd.read_sql_query(f"SELECT {hitter_person_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    
+    fielding_stats_pca = _pca_fielding.transform(_scaler_fielding.transform(fielding_stats_df))
+    hitting_stats_pca = _pca_hitting.transform(_scaler_hitting.transform(hitting_stats_df))
+    stealing_stats_pca = _pca_stealing.transform(_scaler_stealing.transform(stealing_stats_df))
+    parkfactor_stats_pca = _pca_parkfactors.transform(_scaler_parkfactors.transform(parkfactor_stats_df))
+    player_stats_pca = _pca_person.transform(_scaler_person.transform(player_stats_df))
+
+    hitter_input = torch.zeros(fielding_stats_pca.shape[0] + 1, _hitter_cols)
+    initVal = torch.zeros(_hitter_cols, dtype=D_TYPE)
+    initVal[0] = (signingAge - age_mean) / age_std
+    if draftPick is not None:
+        initVal[1] = draftPick
+    else:
+        initVal[1] = NOT_DRAFTED_VALUE
+    initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
+    initVal[2] = 1
+    
+    hitter_input[0] = initVal
+    for i in range(fielding_stats_pca.shape[0]):
+        hitter_input[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
+                                        + list(fielding_stats_pca[i])
+                                        + list(hitting_stats_pca[i])
+                                        + list(stealing_stats_pca[i])
+                                        + list(parkfactor_stats_pca[i])
+                                        + list(player_stats_pca[i]), 
+                                        dtype=D_TYPE)
+    
+    highestLevel, pa, war, off, df, bsr = cursor.execute('''
+                            SELECT pcs.highestLevel, SUM(mpw.pa), SUM(mpw.war), SUM(mpw.off), SUM(mpw.def), SUM(mpw.bsr)
+                            FROM Player_CareerStatus AS pcs
+                            LEFT JOIN Model_PlayerWar as mpw ON pcs.mlbId = mpw.mlbId
+                            WHERE pcs.mlbId=?
+                            AND (mpw.isHitter='1' or mpw.isHitter IS NULL)
+                            AND pcs.position='hitting'
+                            AND pcs.isPrimaryPosition='1'
+                            ''', (id,)).fetchone()
+            
+    
+    hitter_output = torch.zeros(hitter_input.size(0), HITTER_OUTPUT_COLS)
+    # out = torch.tensor([levelMap[highestLevel]], dtype=D_TYPE)
+    if pa is None:
+        # out = (torch.tensor([levelMap[highestLevel], 0, 0, 0, 0, 0], dtype=D_TYPE))
+        out = torch.tensor([0, levelMap[highestLevel], 0], dtype=D_TYPE)
+    else:
+        out = (torch.tensor([war, levelMap[highestLevel], pa], dtype=D_TYPE))
+        
+    for i in range(hitter_output.size(0)):
+        hitter_output[i] = out
+
+    return hitter_input, hitter_output
+
 def Generate_Hitters(
     fielding_components,
     hitting_components, 
@@ -108,76 +178,36 @@ def Generate_Hitters(
     park_components,
     person_components
 ):
-    hitter_cols = fielding_components + hitting_components + stealing_components + park_components + person_components + SIGNING_COMPONENTS
+    global _hitter_cols
+    _hitter_cols = fielding_components + hitting_components + stealing_components + park_components + person_components + SIGNING_COMPONENTS
     
-    scaler_fielding, pca_fielding, fielding_stddev = Generate_Pca(fielding_stats_query, hitter_table, fielding_components)
-    scaler_hitting, pca_hitting, hitting_stddev, = Generate_Pca(hitting_stats_query, hitter_table, hitting_components)
-    scaler_stealing, pca_stealing, stealing_stddev = Generate_Pca(stealing_stats_query, hitter_table, stealing_components)
-    scaler_parkfactors, pca_parkfactors, parkfactor_stddev = Generate_Pca(park_factors_query, hitter_table, park_components)
-    scaler_person, pca_person, person_stddev = Generate_Pca(hitter_person_query, hitter_table, person_components)
+    global _pca_fielding
+    global _pca_hitting
+    global _pca_stealing
+    global _pca_parkfactors
+    global _pca_person
+    global _scaler_fielding
+    global _scaler_hitting
+    global _scaler_stealing
+    global _scaler_parkfactors
+    global _scaler_person
+    
+    _scaler_fielding, _pca_fielding, fielding_stddev = Generate_Pca(fielding_stats_query, hitter_table, fielding_components)
+    _scaler_hitting, _pca_hitting, hitting_stddev, = Generate_Pca(hitting_stats_query, hitter_table, hitting_components)
+    _scaler_stealing, _pca_stealing, stealing_stddev = Generate_Pca(stealing_stats_query, hitter_table, stealing_components)
+    _scaler_parkfactors, _pca_parkfactors, parkfactor_stddev = Generate_Pca(park_factors_query, hitter_table, park_components)
+    _scaler_person, _pca_person, person_stddev = Generate_Pca(hitter_person_query, hitter_table, person_components)
     
     hitterInput = []
     hitterOutput = []
     hitter_ids = []
 
     for id, signingAge, draftPick in tqdm(hitters, leave=False, desc="Hitter Data"):
-        fielding_stats_df = pd.read_sql_query(f"SELECT {fielding_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
-        hitting_stats_df = pd.read_sql_query(f"SELECT {hitting_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
-        stealing_stats_df = pd.read_sql_query(f"SELECT {stealing_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
-        parkfactor_stats_df = pd.read_sql_query(f"SELECT {park_factors_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
-        player_stats_df = pd.read_sql_query(f"SELECT {hitter_person_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
-        
-        fielding_stats_pca = pca_fielding.transform(scaler_fielding.transform(fielding_stats_df))
-        hitting_stats_pca = pca_hitting.transform(scaler_hitting.transform(hitting_stats_df))
-        stealing_stats_pca = pca_stealing.transform(scaler_stealing.transform(stealing_stats_df))
-        parkfactor_stats_pca = pca_parkfactors.transform(scaler_parkfactors.transform(parkfactor_stats_df))
-        player_stats_pca = pca_person.transform(scaler_person.transform(player_stats_df))
-        
-        thisInputs = torch.zeros(fielding_stats_pca.shape[0] + 1, hitter_cols)
-        initVal = torch.zeros(hitter_cols, dtype=D_TYPE)
-        initVal[0] = (signingAge - age_mean) / age_std
-        if draftPick is not None:
-            initVal[1] = draftPick
-        else:
-            initVal[1] = NOT_DRAFTED_VALUE
-        initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
-        initVal[2] = 1
-        
-        thisInputs[0] = initVal
-        for i in range(fielding_stats_pca.shape[0]):
-            thisInputs[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
-                                            + list(fielding_stats_pca[i])
-                                            + list(hitting_stats_pca[i])
-                                            + list(stealing_stats_pca[i])
-                                            + list(parkfactor_stats_pca[i])
-                                            + list(player_stats_pca[i]), 
-                                            dtype=D_TYPE)
-        
-        highestLevel, pa, war, off, df, bsr = cursor.execute('''
-                                SELECT pcs.highestLevel, SUM(mpw.pa), SUM(mpw.war), SUM(mpw.off), SUM(mpw.def), SUM(mpw.bsr)
-                                FROM Player_CareerStatus AS pcs
-                                LEFT JOIN Model_PlayerWar as mpw ON pcs.mlbId = mpw.mlbId
-                                WHERE pcs.mlbId=?
-                                AND (mpw.isHitter='1' or mpw.isHitter IS NULL)
-                                AND pcs.position='hitting'
-                                AND pcs.isPrimaryPosition='1'
-                                ''', (id,)).fetchone()
-                
-        hitterInput.append(thisInputs)
-        
-        thisOutputs = torch.zeros(thisInputs.size(0), HITTER_OUTPUT_COLS)
-        # out = torch.tensor([levelMap[highestLevel]], dtype=D_TYPE)
-        if pa is None:
-            # out = (torch.tensor([levelMap[highestLevel], 0, 0, 0, 0, 0], dtype=D_TYPE))
-            out = torch.tensor([0, levelMap[highestLevel], 0], dtype=D_TYPE)
-        else:
-            out = (torch.tensor([war, levelMap[highestLevel], pa], dtype=D_TYPE))
-            
-        for i in range(thisOutputs.size(0)):
-            thisOutputs[i] = out
-        hitterOutput.append(thisOutputs)
-        
+        hitter_input, hitter_output = Transform_Hitter((id, signingAge, draftPick))
+        hitterInput.append(hitter_input)
+        hitterOutput.append(hitter_output)
         hitter_ids.append(id)
+        
         
     return hitterInput, hitterOutput, (fielding_stddev, 
                                        hitting_stddev, 
