@@ -22,14 +22,19 @@ hitters = cursor.execute('''
                          FROM Model_Players AS mp
                          INNER JOIN Player as p ON mp.mlbId = p.mlbId
                          WHERE mp.isHitter='1'
+                         AND mp.validForTraining='1'
+                         AND p.position='hitting'
                          ORDER BY mp.mlbId
                          ''').fetchall()
+
 
 pitchers = cursor.execute('''
                          SELECT mp.mlbId, mp.ageAtSigningYear, p.draftPick
                          FROM Model_Players AS mp
                          INNER JOIN Player as p ON mp.mlbId = p.mlbId
                          WHERE mp.isPitcher='1'
+                         AND p.position='pitching'
+                         AND mp.validForTraining='1'
                          ''').fetchall()
 
 # Get Age and draft pick, which are done differently than other stats
@@ -57,7 +62,7 @@ age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data()
 
 # Input Normalization
 def Generate_Normalized_Stats(db, stats, table):
-    df = pd.read_sql_query(f"SELECT {stats} FROM {table}", db)
+    df = pd.read_sql_query(f"SELECT {stats} FROM {table} AS t INNER JOIN Model_Players AS mp ON mp.mlbId = t.mlbId WHERE mp.validForTraining='1'", db)
     std_scaler = StandardScaler()
     scaled_stats = std_scaler.fit_transform(df)
     return scaled_stats, std_scaler
@@ -101,17 +106,18 @@ def Generate_Pca(query, table, num_components):
     pca_std_devs = Generate_StdDev_Ratio(pca_model.explained_variance_ratio_)
     return scaler, pca_model, pca_std_devs
 
-_pca_fielding = None
-_pca_hitting = None
-_pca_stealing = None
-_pca_parkfactors = None
-_pca_person = None
-_scaler_fielding = None
-_scaler_hitting = None
-_scaler_stealing = None
-_scaler_parkfactors = None
-_scaler_person = None
-_hitter_cols = 0
+
+# _pca_fielding = None
+# _pca_hitting = None
+# _pca_stealing = None
+# _pca_parkfactors = None
+# _pca_person = None
+# _scaler_fielding = None
+# _scaler_hitting = None
+# _scaler_stealing = None
+# _scaler_parkfactors = None
+# _scaler_person = None
+# _hitter_cols = 0
 
 def Transform_Hitter(hitter_data):
     id, signingAge, draftPick = hitter_data

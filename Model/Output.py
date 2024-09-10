@@ -28,7 +28,8 @@ def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids
     db.rollback()
     db.create_function("signingAge", 6, _Get_Signing_Age)
     cursor = db.cursor()
-    for id in tqdm(ids, desc="Read Player Data"):
+    
+    for (id,) in tqdm(ids, desc="Read Player Data"):
         hitter_data = cursor.execute('''
                                         SELECT mlbId, 
                                         signingAge(birthYear, birthMonth, birthDate, signingYear, signingMonth, signingDate),
