@@ -91,7 +91,7 @@ hitter_person_query = "AGE, PA, Level"
 hitter_table = "Model_HitterStats"
 pitcher_table = "Model_PitcherStats"
 
-HITTER_OUTPUT_COLS = 2
+HITTER_OUTPUT_COLS = 3
 
 def Generate_Pca(query, table, num_components):
     global db
@@ -118,6 +118,7 @@ def Generate_Hitters(
     
     hitterInput = []
     hitterOutput = []
+    hitter_ids = []
 
     for id, signingAge, draftPick in tqdm(hitters, leave=False, desc="Hitter Data"):
         fielding_stats_df = pd.read_sql_query(f"SELECT {fielding_stats_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
@@ -168,19 +169,21 @@ def Generate_Hitters(
         # out = torch.tensor([levelMap[highestLevel]], dtype=D_TYPE)
         if pa is None:
             # out = (torch.tensor([levelMap[highestLevel], 0, 0, 0, 0, 0], dtype=D_TYPE))
-            out = torch.tensor([0, levelMap[highestLevel]], dtype=D_TYPE)
+            out = torch.tensor([0, levelMap[highestLevel], 0], dtype=D_TYPE)
         else:
-            out = (torch.tensor([war, levelMap[highestLevel]], dtype=D_TYPE))
+            out = (torch.tensor([war, levelMap[highestLevel], pa], dtype=D_TYPE))
             
         for i in range(thisOutputs.size(0)):
             thisOutputs[i] = out
         hitterOutput.append(thisOutputs)
         
+        hitter_ids.append(id)
+        
     return hitterInput, hitterOutput, (fielding_stddev, 
                                        hitting_stddev, 
                                        stealing_stddev,
                                        parkfactor_stddev,
-                                       person_stddev)
+                                       person_stddev), hitter_ids
     
 def Generate_Hitter_Mutators(batch_size, max_input_size,
                              fielding_components, fielding_scale, fielding_stddev,
