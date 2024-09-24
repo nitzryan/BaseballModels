@@ -11,6 +11,11 @@ from Constants import device
 from Model_Train import trainAndGraph
 from Dataset import HitterDataset
 
+from Output import Delete_Model_Run_Hitter, Generate_Model_Run_Hitter
+from Constants import db
+
+cursor = db.cursor()
+all_hitter_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='1'").fetchall()
 # Data for savings tests
 xs = []
 losses = []
@@ -29,7 +34,7 @@ hitter_input, hitter_output, (fielding_stddev,
                             hitting_stddev,
                             stealing_stddev,
                             park_stddev,
-                            person_stddev) = Generate_Hitters(fielding_components,
+                            person_stddev), hitter_ids = Generate_Hitters(fielding_components,
                         hitting_components,
                         stealing_components,
                         park_components,
@@ -47,30 +52,32 @@ signing_age_scale = 0.5
 batch_size = 800
 max_input_size = 79
 
-for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
-    test_size = x_var
-    hitting_mutators = Generate_Hitter_Mutators(batch_size, max_input_size,
-                        fielding_components,fielding_scale,fielding_stddev,
-                        hitting_components, hitting_scale, hitting_stddev,
-                        stealing_components, stealing_scale, stealing_stddev,
-                        park_components, park_scale, park_stddev,
-                        person_components, person_scale, person_stddev,
-                        draft_scale, signing_age_scale)
+# for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
+    # test_size = x_var
+hitting_mutators = Generate_Hitter_Mutators(batch_size, max_input_size,
+                    fielding_components,fielding_scale,fielding_stddev,
+                    hitting_components, hitting_scale, hitting_stddev,
+                    stealing_components, stealing_scale, stealing_stddev,
+                    park_components, park_scale, park_stddev,
+                    person_components, person_scale, person_stddev,
+                    draft_scale, signing_age_scale)
 
-    # Prepare data in form for PyTorch
-    test_size = 0.2
-    random_state = 1
+# Prepare data in form for PyTorch
+test_size = 0.2
+random_state = 1
 
-    x_train_padded, x_test_padded, y_train_padded, y_test_padded, train_lengths, test_lengths = Generate_Test_Train(
-        hitter_input, hitter_output, test_size, random_state)
+x_train_padded, x_test_padded, y_train_padded, y_test_padded, train_lengths, test_lengths = Generate_Test_Train(
+    hitter_input, hitter_output, test_size, random_state)
 
-    train_hitters_dataset = HitterDataset(x_train_padded, train_lengths, y_train_padded)
-    test_hitters_dataset = HitterDataset(x_test_padded, test_lengths, y_test_padded)
+train_hitters_dataset = HitterDataset(x_train_padded, train_lengths, y_train_padded)
+test_hitters_dataset = HitterDataset(x_test_padded, test_lengths, y_test_padded)
 
-    # Train Model
-    dropout_perc = 0.0
-    num_layers = 2
-    hidden_size = 50
+# Train Model
+dropout_perc = 0.0
+num_layers = 5
+hidden_size = 30
+
+for n in tqdm(range(30)):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
 
@@ -83,8 +90,12 @@ for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True
     testing_generator = torch.utils.data.DataLoader(test_hitters_dataset, batch_size=batch_size, shuffle=False)
 
     loss = trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, 10, early_stopping_cutoff=40, should_output=False)
-    xs.append(x_var)
-    losses.append(loss)
+    model = f"test_run_hitters_{n}"
+    Delete_Model_Run_Hitter(model)
+    Generate_Model_Run_Hitter(model, all_hitter_ids, hitter_ids, network, device, leave_progress=False)
+
+# xs.append(x_var)
+# losses.append(loss)
    
 # Plot Heatmap
 # x_unique = np.unique(xs)
@@ -109,10 +120,10 @@ for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True
 # plt.savefig('HittingParameters.png')
 # plt.show()
 
-# Plot 2D
-plt.plot(xs, losses, 'bo')
-plt.xlabel('Test Size')
-plt.ylabel('Test Loss')
-plt.title('Test Loss vs Test Size')
-plt.savefig('img/TestSize.png')
-plt.show()
+# # Plot 2D
+# plt.plot(xs, losses, 'bo')
+# plt.xlabel('Test Size')
+# plt.ylabel('Test Loss')
+# plt.title('Test Loss vs Test Size')
+# # plt.savefig('img/TestSize.png')
+# plt.show()

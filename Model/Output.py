@@ -20,7 +20,7 @@ def Delete_Model_Run_Hitter(model : str) -> None :
 def _Get_Signing_Age(birth_year, birth_month, birth_date, signing_year, signing_month, signing_date):
     return signing_year - birth_year + (signing_month - birth_month) / 12 + (signing_date / birth_date) / 365
     
-def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids : List[int], network : nn.Module, device : torch.device) -> None:
+def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids : List[int], network : nn.Module, device : torch.device, leave_progress: bool) -> None:
     inputs = []
     player_ids = []
     
@@ -29,7 +29,7 @@ def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids
     db.create_function("signingAge", 6, _Get_Signing_Age)
     cursor = db.cursor()
     
-    for (id,) in tqdm(ids, desc="Read Player Data"):
+    for (id,) in tqdm(ids, desc="Read Player Data", leave=leave_progress):
         hitter_data = cursor.execute('''
                                         SELECT mlbId, 
                                         signingAge(birthYear, birthMonth, birthDate, signingYear, signingMonth, signingDate),
@@ -42,7 +42,7 @@ def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids
         player_ids.append(id)
       
     cursor.execute("BEGIN TRANSACTION")
-    for i in tqdm(range(len(inputs)), desc='Model Run'):
+    for i in tqdm(range(len(inputs)), desc='Model Run', leave=leave_progress):
         padded_input = torch.nn.utils.rnn.pad_sequence(inputs[i]).unsqueeze(0)
         padded_input = padded_input.transpose(1,2)
         length = torch.tensor(inputs[i].size(0)).unsqueeze(0)
