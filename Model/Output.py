@@ -19,17 +19,19 @@ def Delete_Model_Run_Hitter(model : str) -> None :
 
 def _Get_Signing_Age(birth_year, birth_month, birth_date, signing_year, signing_month, signing_date):
     return signing_year - birth_year + (signing_month - birth_month) / 12 + (signing_date / birth_date) / 365
+ 
+_inputs = []
+_player_ids = [] 
+_model_train_ids = []
     
-def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids : List[int], network : nn.Module, device : torch.device, leave_progress: bool) -> None:
-    inputs = []
-    player_ids = []
-    
-    network.eval()
+def Setup_Players(ids: List[int], model_train_ids: List[int]) -> None :
+    global _inputs
+    global _player_ids
+    global _model_train_ids
     db.rollback()
     db.create_function("signingAge", 6, _Get_Signing_Age)
     cursor = db.cursor()
-    
-    for (id,) in tqdm(ids, desc="Read Player Data", leave=leave_progress):
+    for (id,) in tqdm(ids, desc="Read Player Data", leave=False):
         hitter_data = cursor.execute('''
                                         SELECT mlbId, 
                                         signingAge(birthYear, birthMonth, birthDate, signingYear, signingMonth, signingDate),
@@ -38,18 +40,30 @@ def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids
                                         ''', (id,)).fetchone()
     
         hitter_input, _ = Transform_Hitter(hitter_data)
-        inputs.append(hitter_input)
-        player_ids.append(id)
+        _inputs.append(hitter_input)
+        _player_ids.append(id)
+    _model_train_ids = model_train_ids
+    
+def Generate_Model_Run_Hitter(model_name : str, network : nn.Module, device : torch.device, leave_progress: bool) -> None:
+    global _inputs
+    global _player_ids
+    global _model_train_ids
+    
+    network.eval()
+    db.rollback()
+    cursor = db.cursor()
+    
+    cpu_network = network.to('cpu')
       
     cursor.execute("BEGIN TRANSACTION")
-    for i in tqdm(range(len(inputs)), desc='Model Run', leave=leave_progress):
-        padded_input = torch.nn.utils.rnn.pad_sequence(inputs[i]).unsqueeze(0)
+    for i in tqdm(range(len(_inputs)), desc='Model Run', leave=leave_progress):
+        padded_input = torch.nn.utils.rnn.pad_sequence(_inputs[i]).unsqueeze(0)
         padded_input = padded_input.transpose(1,2)
-        length = torch.tensor(inputs[i].size(0)).unsqueeze(0)
-        padded_input = padded_input.to(device)
+        length = torch.tensor(_inputs[i].size(0)).unsqueeze(0)
+        #padded_input = padded_input.to(device)
         
         with torch.no_grad():
-            output_war, output_level, output_pa = network(padded_input, length)
+            output_war, output_level, output_pa = cpu_network(padded_input, length)
         
         output_war = output_war.to("cpu").squeeze(0)
         output_level = output_level.to("cpu").squeeze(0)
@@ -59,12 +73,12 @@ def Generate_Model_Run_Hitter(model_name : str, ids : List[int], model_train_ids
         output_level = torch.nn.functional.softmax(output_level, dim=1)
         output_pa = torch.nn.functional.softmax(output_pa, dim=1)
         
-        id = player_ids[i]
+        id = _player_ids[i]
         output_dates = [(0,0)] + cursor.execute("SELECT Year, Month FROM Model_HitterStats WHERE mlbId=? ORDER BY Year ASC, Month ASC", (id,)).fetchall()
         
         # Determine if player was in train/test data
         is_tainted = False
-        for test_id in model_train_ids:
+        for test_id in _model_train_ids:
             if test_id == id:
                 is_tainted = True
                 break

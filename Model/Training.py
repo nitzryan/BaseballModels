@@ -11,7 +11,7 @@ from Constants import device
 from Model_Train import trainAndGraph
 from Dataset import HitterDataset
 
-from Output import Delete_Model_Run_Hitter, Generate_Model_Run_Hitter
+from Output import Delete_Model_Run_Hitter, Generate_Model_Run_Hitter, Setup_Players
 from Constants import db
 
 cursor = db.cursor()
@@ -77,6 +77,8 @@ dropout_perc = 0.0
 num_layers = 5
 hidden_size = 30
 
+Setup_Players(all_hitter_ids, hitter_ids)
+
 for n in tqdm(range(30)):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
@@ -92,7 +94,7 @@ for n in tqdm(range(30)):
     loss = trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, 10, early_stopping_cutoff=40, should_output=False)
     model = f"test_run_hitters_{n}"
     Delete_Model_Run_Hitter(model)
-    Generate_Model_Run_Hitter(model, all_hitter_ids, hitter_ids, network, device, leave_progress=False)
+    Generate_Model_Run_Hitter(model, network, device, leave_progress=False)
 
 # xs.append(x_var)
 # losses.append(loss)

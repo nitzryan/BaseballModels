@@ -21,8 +21,8 @@ for id, firstName, lastName in playerData:
                               ORDER BY year ASC
                               ''', (id,id)).fetchall()
     if len(mlbYears) > 0:
-        firstYear = mlbYears[0]
-        lastYear = mlbYears[-1]
+        firstYear = mlbYears[0][0]
+        lastYear = mlbYears[-1][0]
     else:
         firstYear = None
         lastYear = None
@@ -37,8 +37,8 @@ for id, firstName, lastName in playerData:
                               WHERE mlbId=?
                               ORDER BY year ASC
                               ''', (id,id)).fetchall()
-    firstTotalYear = allYears[0]
-    lastTotalYear = allYears[-1]
+    firstTotalYear = allYears[0][0]
+    lastTotalYear = allYears[-1][0]
     
     teams = cursor.execute('''
                         SELECT DISTINCT teamId

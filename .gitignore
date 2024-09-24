@@ -19,3 +19,4 @@
 *.pyc
 /SiteData/Hitters
 /SiteData/Pitchers
+/.vscode
