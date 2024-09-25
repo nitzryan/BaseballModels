@@ -35,6 +35,7 @@ pitchers = cursor.execute('''
                          WHERE mp.isPitcher='1'
                          AND p.position='pitching'
                          AND mp.validForTraining='1'
+                         ORDER BY mp.mlbId
                          ''').fetchall()
 
 # Get Age and draft pick, which are done differently than other stats
@@ -91,12 +92,16 @@ fielding_stats_query = "PercC, Perc1B, Perc2B, Perc3B, PercSS, PercLF, PercCF, P
 hitting_stats_query = "avgRatio, obpRatio, isoRatio, wOBARatio, hrPercRatio, bbPercRatio, kPercRatio"
 stealing_stats_query = "sbRateRatio, sbPercRatio"
 park_factors_query = "ParkRunFactor, ParkHRFactor"
-hitter_person_query = "AGE, PA, Level"
+hitter_person_query = "Age, PA, Level"
+
+pitcher_person_query = "Age, BF, Level"
+pitching_stats_query = "GBPercRatio, ERARatio, FIPRatio, wOBARatio, hrPercRatio, bbPercRatio, kPercRatio"
 
 hitter_table = "Model_HitterStats"
 pitcher_table = "Model_PitcherStats"
 
 HITTER_OUTPUT_COLS = 3
+PITCHER_OUTPUT_COLS = 3
 
 def Generate_Pca(query, table, num_components):
     global db
@@ -268,9 +273,150 @@ def Generate_Hitter_Mutators(batch_size, max_input_size,
         hitting_mutators[1,:] = draft_delta
     
     return hitting_mutators
+   
+####### PITCHER VARIANTS ############
+
+def Transform_Pitcher(pitcher_data):
+    id, signingAge, draftPick = pitcher_data
+    pitching_stats_df = pd.read_sql_query(f"SELECT {pitching_stats_query} FROM Model_PitcherStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    parkfactor_stats_df = pd.read_sql_query(f"SELECT {park_factors_query} FROM Model_PitcherStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
+    player_stats_df = pd.read_sql_query(f"SELECT {pitcher_person_query} FROM Model_PitcherStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
     
-def Generate_Test_Train(hitter_input, hitter_output, test_size, random_state):
-    x_train, x_test, y_train, y_test = train_test_split(hitter_input, hitter_output, test_size=test_size, random_state=random_state)
+    if pitching_stats_df.shape[0] == 0:
+        pitcher_input = torch.zeros(1, _pitcher_cols)
+        initVal = torch.zeros(_pitcher_cols, dtype=D_TYPE)
+        initVal[0] = (signingAge - age_mean) / age_std
+        if draftPick is not None:
+            initVal[1] = draftPick
+        else:
+            initVal[1] = NOT_DRAFTED_VALUE
+        initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
+        initVal[2] = 1
+        pitcher_input[0] = initVal
+        
+    else:
+        pitching_stats_pca = _pca_pitching.transform(_scaler_pitching.transform(pitching_stats_df))
+        parkfactor_stats_pca = _pca_parkfactors.transform(_scaler_parkfactors.transform(parkfactor_stats_df))
+        player_stats_pca = _pca_person.transform(_scaler_person.transform(player_stats_df))
+
+        pitcher_input = torch.zeros(pitching_stats_pca.shape[0] + 1, _pitcher_cols)
+        initVal = torch.zeros(_pitcher_cols, dtype=D_TYPE)
+        initVal[0] = (signingAge - age_mean) / age_std
+        if draftPick is not None:
+            initVal[1] = draftPick
+        else:
+            initVal[1] = NOT_DRAFTED_VALUE
+        initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
+        initVal[2] = 1
+        
+        pitcher_input[0] = initVal
+        for i in range(pitching_stats_pca.shape[0]):
+            pitcher_input[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
+                                            + list(pitching_stats_pca[i])
+                                            + list(parkfactor_stats_pca[i])
+                                            + list(player_stats_pca[i]), 
+                                            dtype=D_TYPE)
+    
+    highestLevel, pa, war = cursor.execute('''
+                            SELECT pcs.highestLevel, SUM(mpw.pa), SUM(mpw.war)
+                            FROM Player_CareerStatus AS pcs
+                            LEFT JOIN Model_PlayerWar as mpw ON pcs.mlbId = mpw.mlbId
+                            WHERE pcs.mlbId=?
+                            AND (mpw.isHitter='0' or mpw.isHitter IS NULL)
+                            AND pcs.position='pitching'
+                            AND pcs.isPrimaryPosition='1'
+                            ''', (id,)).fetchone()
+            
+    
+    pitcher_output = torch.zeros(pitcher_input.size(0), PITCHER_OUTPUT_COLS)
+    # out = torch.tensor([levelMap[highestLevel]], dtype=D_TYPE)
+    if highestLevel is None:
+        out = torch.tensor([0, 6, 0], dtype=D_TYPE)
+    elif pa is None:
+        # out = (torch.tensor([levelMap[highestLevel], 0, 0, 0, 0, 0], dtype=D_TYPE))
+        out = torch.tensor([0, levelMap[highestLevel], 0], dtype=D_TYPE)
+    else:
+        out = (torch.tensor([war, levelMap[highestLevel], pa], dtype=D_TYPE))
+        
+    for i in range(pitcher_output.size(0)):
+        pitcher_output[i] = out
+
+    return pitcher_input, pitcher_output
+
+def Generate_Pitchers(
+    pitching_components,
+    park_components,
+    person_components
+):
+    global _pitcher_cols
+    _pitcher_cols = pitching_components + park_components + person_components + SIGNING_COMPONENTS
+    
+    global _pca_pitching
+    global _pca_person
+    global _scaler_pitching
+    global _scaler_person
+    global _pca_parkfactors
+    global _scaler_parkfactors
+    
+    _scaler_pitching, _pca_pitching, pitching_stddev = Generate_Pca(pitching_stats_query, pitcher_table, pitching_components)
+    _scaler_parkfactors, _pca_parkfactors, parkfactor_stddev = Generate_Pca(park_factors_query, hitter_table, park_components)
+    _scaler_person, _pca_person, person_stddev = Generate_Pca(pitcher_person_query, pitcher_table, person_components)
+    
+    pitcherInput = []
+    pitcherOutput = []
+    pitcher_ids = []
+
+    for id, signingAge, draftPick in tqdm(pitchers, leave=False, desc="Pitcher Data"):
+        pitcher_input, pitcher_output = Transform_Pitcher((id, signingAge, draftPick))
+        pitcherInput.append(pitcher_input)
+        pitcherOutput.append(pitcher_output)
+        pitcher_ids.append(id)
+        
+        
+    return pitcherInput, pitcherOutput, (pitching_stddev, parkfactor_stddev,
+                                       person_stddev), pitcher_ids
+
+
+def Generate_Pitcher_Mutators(batch_size, max_input_size,
+                             pitching_components, pitching_scale, pitching_stddev,
+                             park_components, park_scale, park_stddev,
+                                person_components, player_scale, player_stddev,
+                                draft_scale, signing_age_scale):
+    pitcher_cols = pitching_components + park_components + person_components + 3
+    pitching_mutators = torch.zeros(size=(batch_size, max_input_size,pitcher_cols), dtype=D_TYPE)
+    for n in tqdm(range(batch_size), leave=False, desc="Mutators"):
+        for m in range(max_input_size):
+            player_header = [0,0,0]
+        
+            pitching_mutator = [0] * pitching_components
+            for i in range(pitching_components):
+                pitching_mutator[i] = pitching_scale * random.gauss(0, pitching_stddev[i])
+            
+            parkfactor_mutator = [0] * park_components
+            for i in range(park_components):
+                parkfactor_mutator[i] = park_scale * random.gauss(0, park_stddev[i])
+            
+            player_mutator = [0] * person_components
+            for i in range(person_components):
+                player_mutator[i] = player_scale * random.gauss(0, player_stddev[i])
+            
+            pitching_mutators[n, m] = torch.tensor(player_header
+                                                   + pitching_mutator
+                                            + parkfactor_mutator
+                                            + player_mutator,
+                                            dtype=float)
+        
+        signing_delta = signing_age_scale * random.gauss(0, 1)
+        draft_delta = draft_scale * random.gauss(0, 1)
+        pitching_mutators[0,:] = signing_delta
+        pitching_mutators[1,:] = draft_delta
+    
+    return pitching_mutators
+
+#####################################
+    
+def Generate_Test_Train(input, output, test_size, random_state):
+    x_train, x_test, y_train, y_test = train_test_split(input, output, test_size=test_size, random_state=random_state)
 
     train_lengths = torch.tensor([len(seq) for seq in x_train])
     test_lengths = torch.tensor([len(seq) for seq in x_test])
