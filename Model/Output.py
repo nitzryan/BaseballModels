@@ -3,7 +3,7 @@ from typing import List
 import torch.nn as nn
 import torch
 from tqdm import tqdm
-from Player_Prep import Transform_Hitter
+from Player_Prep import Transform_Hitter, Transform_Pitcher
 
 def Delete_Model_Run_Hitter(model : str) -> None :
     db.rollback()
@@ -107,13 +107,38 @@ def Generate_Model_Run_Hitter(model_name : str, network : nn.Module, device : to
     
 ####### PITCHER VARIANTS ############
 
+def Setup_Pitchers(ids: List[int], model_train_ids: List[int]) -> None :
+    global _inputs
+    global _player_ids
+    global _model_train_ids
+    
+    _inputs = []
+    _player_ids = []
+    _model_train_ids = []
+    
+    db.rollback()
+    db.create_function("signingAge", 6, _Get_Signing_Age)
+    cursor = db.cursor()
+    for (id,) in tqdm(ids, desc="Read Player Data", leave=False):
+        pitcher_data = cursor.execute('''
+                                        SELECT mlbId, 
+                                        signingAge(birthYear, birthMonth, birthDate, signingYear, signingMonth, signingDate),
+                                        draftPick
+                                        FROM Player WHERE mlbId=? 
+                                        ''', (id,)).fetchone()
+    
+        pitcher_input, _ = Transform_Pitcher(pitcher_data)
+        _inputs.append(pitcher_input)
+        _player_ids.append(id)
+    _model_train_ids = model_train_ids
+
 def Delete_Model_Run_Pitcher(model : str) -> None :
     db.rollback()
     cursor = db.cursor()
     ids = cursor.execute("SELECT outputId FROM Output_PitcherResult WHERE modelVersion=?", (model,)).fetchall()
     cursor.execute("BEGIN TRANSACTION")
     cursor.executemany("DELETE FROM Output_PitcherLevel WHERE outputId=?", ids)
-    cursor.executemany("DELETE FROM Output_PitcherPA WHERE outputId=?", ids)
+    cursor.executemany("DELETE FROM Output_PitcherBF WHERE outputId=?", ids)
     cursor.executemany("DELETE FROM Output_PitcherWar WHERE outputId=?", ids)
     cursor.executemany("DELETE FROM Output_PitcherResult WHERE outputId=?", ids)
     cursor.execute("END TRANSACTION")
@@ -123,10 +148,6 @@ def Generate_Model_Run_Pitcher(model_name : str, network : nn.Module, device : t
     global _inputs
     global _player_ids
     global _model_train_ids
-    
-    _inputs = []
-    _player_ids = []
-    _model_train_ids = []
     
     network.eval()
     db.rollback()
@@ -175,7 +196,7 @@ def Generate_Model_Run_Pitcher(model_name : str, network : nn.Module, device : t
             cursor.execute("INSERT INTO Output_PitcherLevel VALUES(?,?,?,?,?,?,?,?,?)",
                            (output_id, output_level[j,0].item(),output_level[j,1].item(),output_level[j,2].item(),
                             output_level[j,3].item(),output_level[j,4].item(),output_level[j,5].item(),output_level[j,6].item(),output_level[j,7].item()))
-            cursor.execute("INSERT INTO Output_PitcherPa VALUES(?,?,?,?,?,?,?)",
+            cursor.execute("INSERT INTO Output_PitcherBF VALUES(?,?,?,?,?,?,?)",
                            (output_id, output_bf[j,0].item(),output_bf[j,1].item(),output_bf[j,2].item(),
                             output_bf[j,3].item(),output_bf[j,4].item(),output_bf[j,5].item()))
         
