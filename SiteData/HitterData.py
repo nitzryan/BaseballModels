@@ -9,7 +9,6 @@ cursor = db.cursor()
 ids = cursor.execute("SELECT DISTINCT mlbId FROM Output_AggregateHitterWar").fetchall()
 for id, in tqdm(ids):
     data = {"models_hitter":[]}
-    
     # Go Model by Model
     models = cursor.execute("SELECT DISTINCT model FROM Output_AggregateHitterWar WHERE mlbId=?", (id,)).fetchall()
     all_stats = []
@@ -21,7 +20,8 @@ for id, in tqdm(ids):
             wars = tuple(round(x * 100, 1) for x in wars)
             
             if n == 0:
-                statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, PA, AVG, OBP, SLG, ISO, wOBA, HRPerc, BBPerc, KPerc, SBRate, SBPerc FROM Player_Hitter_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
+                #statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, PA, AVG, OBP, SLG, ISO, wOBA, HRPerc, BBPerc, KPerc, SBRate, SBPerc FROM Player_Hitter_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
+                statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, PA, AVG, OBP, SLG, ISO, wOBA, HRPerc, BBPerc, KPerc FROM Player_Hitter_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
                 stats = []
                 for s in statsData:
                     s = tuple(round(x,3) for x in s)
@@ -40,6 +40,11 @@ for id, in tqdm(ids):
     data["year"] = signing_year
     data["stats"] = all_stats
     
+    birth_year, birth_month, birth_date = cursor.execute("SELECT birthYear, birthMonth, birthDate FROM Player WHERE mlbId=? LIMIT 1", (id,)).fetchone()
+    data["birth_year"] = birth_year
+    data["birth_month"] = birth_month
+    data["birth_date"] = birth_date
+    
     json_data = json.dumps(data, indent=2)
-    with open(f"Hitters/{id}.json", "w") as file:
+    with open(f"../../../ProspectRankingsSite2/public/assets/player_data/{id}.json", "w") as file:
         file.write(json_data)

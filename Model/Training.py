@@ -4,6 +4,7 @@ import seaborn as sns
 import numpy as np
 from torch.optim import lr_scheduler
 from tqdm import tqdm
+import sys
 
 from Player_Prep import Generate_Hitters, Generate_Hitter_Mutators, Generate_Test_Train
 from Model import RNN_Model, RNN_Classification_Loss
@@ -79,7 +80,7 @@ hidden_size = 30
 
 Setup_Players(all_hitter_ids, hitter_ids)
 
-for n in tqdm(range(30)):
+for n in tqdm(range(int(sys.argv[1]))):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
 
