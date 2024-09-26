@@ -21,13 +21,13 @@ for id, in tqdm(ids):
             
             if n == 0:
                 #statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, PA, AVG, OBP, SLG, ISO, wOBA, HRPerc, BBPerc, KPerc, SBRate, SBPerc FROM Player_Hitter_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
-                #statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, PA, AVG, OBP, SLG, ISO, wOBA, HRPerc, BBPerc, KPerc FROM Player_Hitter_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
+                statsData = cursor.execute("SELECT LevelId, LeagueId, TeamId, Outs, GBRatio, ERA, FIP, KPerc, BBPerc, HRPerc, wOBA FROM Player_Pitcher_MonthAdvanced WHERE mlbId=? AND year=? AND month=? ORDER BY LevelId DESC", (id,year,month)).fetchall()
                 stats = []
-                # for s in statsData:
-                #     s = tuple(round(x,3) for x in s)
-                #     stats.append(list(s))
-                # if len(stats) > 0:
-                #     all_stats.append({"stats":stats, "year":year, "month":month})
+                for s in statsData:
+                    s = tuple(round(x,3) for x in s)
+                    stats.append(list(s))
+                if len(stats) > 0:
+                    all_stats.append({"stats":stats, "year":year, "month":month})
             this_model["data"].append({"war":list(wars), "year":year, "month":month})
             
         data["models_pitcher"].append(this_model)
@@ -39,6 +39,7 @@ for id, in tqdm(ids):
     data["draft"] = draft_pick
     data["year"] = signing_year
     data["stats"] = all_stats
+    data["player_type"] = "P"
     
     birth_year, birth_month, birth_date = cursor.execute("SELECT birthYear, birthMonth, birthDate FROM Player WHERE mlbId=? LIMIT 1", (id,)).fetchone()
     data["birth_year"] = birth_year

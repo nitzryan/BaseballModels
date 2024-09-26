@@ -44,6 +44,7 @@ for id, in tqdm(ids):
     data["birth_year"] = birth_year
     data["birth_month"] = birth_month
     data["birth_date"] = birth_date
+    data["player_type"] = "H"
     
     json_data = json.dumps(data, indent=2)
     with open(f"../../../ProspectRankingsSite2/public/assets/player_data/{id}.json", "w") as file:
