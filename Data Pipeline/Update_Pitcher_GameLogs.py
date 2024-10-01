@@ -155,5 +155,6 @@ def Update_Pitcher_GameLogs(db : sqlite3.Connection, year : int, month : int) ->
     cursor = db.cursor()
     cursor.execute("BEGIN TRANSACTION")
     cursor.execute("UPDATE Player_Pitcher_GameLog SET Level=? WHERE LeagueId=?", (17, DSL_LEAGUE_ID))
+    cursor.execute("DELETE FROM Player_Pitcher_GameLog WHERE Level>?", (17,))
     cursor.execute("END TRANSACTION")
     db.commit()
