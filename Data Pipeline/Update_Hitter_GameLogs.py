@@ -7,10 +7,9 @@ import time
 
 from Constants import SPORT_IDS, MEXICAN_LEAGUE_ID, DSL_LEAGUE_ID
 
-_dbWriteLock = threading.Lock()
 NUM_THREADS = 16
 threadCompleteCounts = [0] * NUM_THREADS
-threadData = [[]] * NUM_THREADS
+threadData = [[] for _ in range(NUM_THREADS)]
 
 def _GenerateHitterYearGameLogs(db : sqlite3.Connection, threadIdx, mlbId, year, startMonth=0, endMonth=13):
     global threadData
@@ -21,8 +20,11 @@ def _GenerateHitterYearGameLogs(db : sqlite3.Connection, threadIdx, mlbId, year,
     
     response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{mlbId}/stats?stats=gameLog&leagueListId=mlb_milb&group=hitting&gameType=R&sitCodes=1,2,3,4,5,6,7,8,9,10,11,12&hydrate=team&language=en&season={year}")
     if response.status_code != 200:
-        print(f"Status code {response.status_code} for id={mlbId} year={year}")
-        return
+        time.sleep(2)
+        response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{mlbId}/stats?stats=gameLog&leagueListId=mlb_milb&group=hitting&gameType=R&sitCodes=1,2,3,4,5,6,7,8,9,10,11,12&hydrate=team&language=en&season={year}")
+        if response.status_code != 200:
+            print(f"Status code {response.status_code} for id={mlbId} year={year}")
+            return
     try:
         # Make sure any data exists
         try:
@@ -92,7 +94,8 @@ def _Get_All_HitterLogs(db : sqlite3.Connection, playerYearDict, year, month):
 
     threads = []
     for i in range(NUM_THREADS):
-        thread = threading.Thread(target=_HitterGameLogThreadFunction, args=[ids[len(ids) * i // NUM_THREADS : len(ids) * (i + 1) // NUM_THREADS], i, year, month])
+        data = ids[len(ids) * i // NUM_THREADS : len(ids) * (i + 1) // NUM_THREADS]
+        thread = threading.Thread(target=_HitterGameLogThreadFunction, args=[data, i, year, month])
         threads.append(thread)
         thread.start()
         
