@@ -34,6 +34,7 @@ class HitterDataset(torch.utils.data.Dataset):
         return self.data[:,idx], self.lengths[idx], self.war_buckets[:,idx], self.level_buckets[:,idx], self.pa_buckets[:,idx]
     
 # Same for now, but may want to change
+# PITCHER_WAR_BUCKETS = torch.tensor([0,1,5,10,15,20,np.inf], dtype=D_TYPE)
 BF_BUCKETS = torch.tensor([0, 50, 200, 1000, 2000, np.inf]) 
 class PitcherDataset(torch.utils.data.Dataset):
     def __init__(self, data, lengths, labels):
