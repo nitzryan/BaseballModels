@@ -12,6 +12,7 @@ from Calculate_Ratios import Calculate_Ratios
 from Update_ServiceTime import Update_ServiceTime
 from Model_Players import Model_Players
 from Model_MonthStats import Model_MonthStats
+from Model_PlayerWar import Model_PlayerWar
 
 if __name__ == '__main__':
     year = int(sys.argv[1])
@@ -20,6 +21,7 @@ if __name__ == '__main__':
     if month == 13:
         Update_ServiceTime(db, year)
         Update_Careers(db, year, month)
+        Model_PlayerWar(db)
         exit(0)
     
     #Get_Players(db, year)
