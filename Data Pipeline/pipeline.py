@@ -10,6 +10,8 @@ from Calculate_Pitcher_MonthStats import Calculate_Pitcher_MonthStats
 from Calculate_LevelStats import Calculate_LevelStats
 from Calculate_Ratios import Calculate_Ratios
 from Update_ServiceTime import Update_ServiceTime
+from Model_Players import Model_Players
+from Model_MonthStats import Model_MonthStats
 
 if __name__ == '__main__':
     year = int(sys.argv[1])
@@ -28,6 +30,6 @@ if __name__ == '__main__':
     #Calculate_Pitcher_MonthStats(db, year, month)
     # Calculate_LevelStats(db, year, month)
     # Calculate_Ratios(db, year, month)
-    Update_Careers(db, year, month)
-    
-        
+    #Update_Careers(db, year, month)
+    Model_Players(db, year, month)
+    Model_MonthStats(db)
