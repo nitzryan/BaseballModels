@@ -86,16 +86,19 @@ def _Update_IsActive(db : sqlite3.Connection, year : int):
     cursor = db.cursor()
     cursor.execute("BEGIN TRANSACTION")
     ids = cursor.execute("SELECT mlbId, isHitter, isPitcher FROM Player_CareerStatus").fetchall()
-    for id, isHitter, isPitcher in tqdm(ids, desc="Updating IsActive in PCS"):
+    for id, isHitter, isPitcher in tqdm(ids, desc="Updating IsActive in PCS", leave=False):
         if isHitter:
             table = "Player_Hitter_MonthStats"
         else:
             table = "Player_Pitcher_MonthStats"
             
-        lastYear = cursor.execute(f"SELECT Year FROM {table} WHERE mlbId=? ORDER BY Year DESC LIMIT 1", (id,)).fetchone()[0]
-        if (year - lastYear) >= 2:
-            isActive = 0
-        else:
+        try:
+            lastYear = cursor.execute(f"SELECT Year FROM {table} WHERE mlbId=? ORDER BY Year DESC LIMIT 1", (id,)).fetchone()[0]
+            if (year - lastYear) >= 2:
+                isActive = 0
+            else:
+                isActive = 1
+        except: # No stats, likely means drafted but not played
             isActive = 1
             
         cursor.execute("UPDATE Player_CareerStatus SET isActive=? WHERE mlbId=?", (isActive, id))
@@ -136,7 +139,7 @@ def _Get_MLB_StartYear(db : sqlite3.Connection):
     db.rollback()
     cursor = db.cursor()
     cursor.execute("BEGIN TRANSACTION")
-    ids = cursor.execute("SELECT mlbId FROM Player_CareerStatus WHERE mlbStartYear IS NULL")
+    ids = cursor.execute("SELECT mlbId FROM Player_CareerStatus WHERE mlbStartYear IS NULL").fetchall()
     for id, in tqdm(ids, desc="MLB Start Year Check", leave=False):
         pitchingYear = cursor.execute("SELECT year FROM Player_Pitcher_MonthStats WHERE mlbId=? AND level=? ORDER BY year ASC LIMIT 1", (id, 1)).fetchone()
         hittingYear = cursor.execute("SELECT year FROM Player_Hitter_MonthStats WHERE mlbId=? AND levelId=? ORDER BY year ASC LIMIT 1", (id, 1)).fetchone()
@@ -201,8 +204,18 @@ def _Set_Service_EndYear(db : sqlite3.Connection):
     db.commit()
     
 def _Set_CareerStartYear(db : sqlite3.Connection, year : int):
-    CUTOFF_YEAR = 2008 # Don't have data for pre-05, so if any data before this year need to check
     db.rollback()
+    cursor = db.cursor()
+    
+    # First Insert from Pre05 Players
+    pre05_data = cursor.execute("SELECT mlbId, careerStartYear FROM Pre05_Players").fetchall()
+    cursor.execute("BEGIN TRANSACTION")
+    for id, start_year in pre05_data:
+        cursor.execute("UPDATE Player_CareerStatus SET careerStartYear=? WHERE mlbId=?", (start_year, id))
+    cursor.execute("END TRANSACTION")
+    db.commit()
+    
+    # Get data from first year that player was found
     cursor = db.cursor()
     ids = cursor.execute("SELECT mlbId, isHitter, isPitcher FROM Player_CareerStatus WHERE careerStartYear IS NULL").fetchall()
     cursor.execute("BEGIN TRANSACTION")
@@ -213,94 +226,96 @@ def _Set_CareerStartYear(db : sqlite3.Connection, year : int):
             table = "Player_Pitcher_MonthStats"
         
         try:
-            first_year = cursor.execute(f"SELECT Year FROM {table} WHERE mlbId=? ORDER BY Year ASC LIMIT 1").fetchone()[0]
+            first_year = cursor.execute(f"SELECT Year FROM {table} WHERE mlbId=? ORDER BY Year ASC LIMIT 1", (id,)).fetchone()[0]
         except: # Empty data, so no stats
             first_year = year
-        if first_year >= CUTOFF_YEAR:
-            cursor.execute("UPDATE Player_CareerStatus SET careerStartYear=? WHERE mlbId=?", (first_year, id))
+        cursor.execute("UPDATE Player_CareerStatus SET careerStartYear=? WHERE mlbId=?", (first_year, id))
             
     cursor.execute("END TRANSACTION")
     db.commit()
     
-def _Check_CareerStartYear_ForOldData(db : sqlite3.Connection):
-    db.rollback()
-    cursor = db.cursor()
-    noCareerStartData = cursor.execute('''SELECT mlbId 
-                                       FROM Player_CareerStatus 
-                                       WHERE careerStartYear IS NULL 
-                                       ORDER BY mlbId ASC''').fetchall()
-    lenData = len(noCareerStartData)
-    if lenData == 0:
-        return
+# This should only be run once
+# Commented so that it is not accidentally run again, left in case the db breaks
+# def _Check_CareerStartYear_ForOldData(db : sqlite3.Connection):
+#     db.rollback()
+#     cursor = db.cursor()
+#     noCareerStartData = cursor.execute('''SELECT mlbId 
+#                                        FROM Player_CareerStatus 
+#                                        WHERE careerStartYear IS NULL 
+#                                        ORDER BY mlbId ASC''').fetchall()
+#     lenData = len(noCareerStartData)
+#     if lenData == 0:
+#         return
     
-    NUM_THREADS = 24
-    dbData = [[]] * NUM_THREADS
-    threadCompleteCounts = [0] * NUM_THREADS
+#     NUM_THREADS = 24
+#     dbData = [[] for _ in range(NUM_THREADS)]
+#     threadCompleteCounts = [0] * NUM_THREADS
 
-    def ThreadingFunction(threadIdx, data):
-        for i, (id,) in enumerate(data):
-            response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{id}?hydrate=currentTeam,team,stats(type=[yearByYear](team(league)),leagueListId=mlb_milb)&site=en")
-            if response.status_code != 200:
-                print(f"Error for id={id}: {response.status_code}")
-                continue
+#     def ThreadingFunction(threadIdx, data):
+#         for i, (id,) in enumerate(data):
+#             response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{id}?hydrate=currentTeam,team,stats(type=[yearByYear](team(league)),leagueListId=mlb_milb)&site=en")
+#             if response.status_code != 200:
+#                 print(f"Error for id={id}: {response.status_code}")
+#                 continue
             
-            jsonData = response.json()
-            try:
-                year = None
-                for splitData in jsonData["people"][0]["stats"][0]["splits"]:
-                    if splitData["sport"]["id"] > 16:
-                        continue
-                    if splitData["league"]["id"] == MEXICAN_LEAGUE_ID:
-                        continue
-                    year = splitData["season"]
-                    break
-                dbData[threadIdx].append((year, id))
-            except Exception as e:
-                pass
+#             jsonData = response.json()
+#             try:
+#                 year = None
+#                 for splitData in jsonData["people"][0]["stats"][0]["splits"]:
+#                     if splitData["sport"]["id"] > 16:
+#                         continue
+#                     if splitData["league"]["id"] == MEXICAN_LEAGUE_ID:
+#                         continue
+#                     year = int(splitData["season"])
+#                     break
+#                 if year < 2005:
+#                     dbData[threadIdx].append((id,year))
+#             except Exception as e:
+#                 dbData[threadIdx].append((id,0))
             
-            threadCompleteCounts[threadIdx] = i + 1
+#             threadCompleteCounts[threadIdx] = i + 1
         
     
         
-    threads = []
-    for i in range(NUM_THREADS):
-        thread = threading.Thread(target=ThreadingFunction, args=[i, noCareerStartData[
-            i * lenData // NUM_THREADS : (i + 1) * lenData // NUM_THREADS
-        ]])
-        thread.start()
-        threads.append(thread)
+#     threads = []
+#     for i in range(NUM_THREADS):
+#         thread = threading.Thread(target=ThreadingFunction, args=[i, noCareerStartData[
+#             i * lenData // NUM_THREADS : (i + 1) * lenData // NUM_THREADS
+#         ]])
+#         thread.start()
+#         threads.append(thread)
         
-    # Progress Bar
-    progressBar = tqdm(total=len(noCareerStartData))
-    # Start progress bar
-    keepTimerRunning = True
-    def UpdateTimer():
-        if keepTimerRunning:
-            threading.Timer(5.0, UpdateTimer).start()
+#     # Progress Bar
+#     progressBar = tqdm(total=len(noCareerStartData))
+#     # Start progress bar
+#     keepTimerRunning = True
+#     def UpdateTimer():
+#         if keepTimerRunning:
+#             threading.Timer(5.0, UpdateTimer).start()
         
-        count = 0
-        global threadCompleteCounts
-        for i in range(NUM_THREADS):
-            count += threadCompleteCounts[i]
+#         count = 0
+#         threadCompleteCounts
+#         for i in range(NUM_THREADS):
+#             count += threadCompleteCounts[i]
         
-        progressBar.n = count
-        progressBar.last_print_n = progressBar.n
-        progressBar.refresh()
+#         progressBar.n = count
+#         progressBar.last_print_n = progressBar.n
+#         progressBar.refresh()
         
-    UpdateTimer()
+#     UpdateTimer()
 
-    for thread in threads:
-        thread.join()
+#     for thread in threads:
+#         thread.join()
         
-    keepTimerRunning = False
+#     keepTimerRunning = False
 
-    cursor.execute("BEGIN TRANSACTION")
-    for data in dbData:
-        for (year, id) in data:
-            cursor.execute("UPDATE Player_CareerStatus SET careerStartYear=? WHERE mlbId=?", (year, id))
+#     cursor.execute("BEGIN TRANSACTION")
+#     for data in dbData:
+#         for (id,year) in data:
+#             cursor.execute("INSERT INTO Pre05_Players('mlbId','careerStartYear') VALUES(?,?)", (id, year))
         
-    cursor.execute("END TRANSACTION")
-    db.commit()
+#     cursor.execute("END TRANSACTION")
+#     db.commit()
     
 def _Check_Aged_Out_NoMLB(db : sqlite3.Connection, year : int):
     db.rollback()
@@ -308,7 +323,7 @@ def _Check_Aged_Out_NoMLB(db : sqlite3.Connection, year : int):
     ids = cursor.execute("SELECT mlbId FROM Player_CareerStatus WHERE mlbStartYear IS NULL AND agedOut IS NULL").fetchall()
     cursor.execute("BEGIN TRANSACTION")
     cutoffYear = year + 1 - AGED_OUT_AGE
-    for id, in tqdm(ids):
+    for id, in tqdm(ids, desc="Check Out Aged no MLB", leave=False):
         birthYear, birthMonth = cursor.execute("SELECT birthYear, birthMonth FROM Player WHERE mlbId=?", (id,)).fetchone()
         
         # Need to eliminate any players who don't have a listed birth date
@@ -334,7 +349,7 @@ def _Check_Aged_Out_LateMLB(db : sqlite3.Connection, year : int):
 
     noMlbPlayers = cursor.execute("SELECT mlbId, mlbStartYear FROM Player_CareerStatus WHERE mlbStartYear IS NOT NULL AND agedOut IS NULL").fetchall()
     cursor.execute("BEGIN TRANSACTION")
-    for id, startYear in tqdm(noMlbPlayers):
+    for id, startYear in tqdm(noMlbPlayers, desc="Check Aged Out MLB", leave=False):
         birthYear, birthMonth = cursor.execute("SELECT birthYear, birthMonth FROM Player WHERE mlbId=?", (id,)).fetchone()
         if birthMonth >= 4:
             birthYear += 1
@@ -368,13 +383,8 @@ def _Get_Highest_Level(db: sqlite3.Connection):
     cursor.execute("BEGIN TRANSACTION")
     idDatas = cursor.execute("SELECT mlbId FROM Player_CareerStatus WHERE highestLevel IS NULL").fetchall()
     for id, in tqdm(idDatas, desc="Getting Highest Level", leave=False):
-        # Determine if age cuttoff is needed
-        cutoffYear = cursor.execute("SELECT agedOut FROM Player_CareerStatus WHERE mlbId=?", (id,)).fetchone()[0]
-        if cutoffYear == 0:
-            cutoffYear = 9000
-        
-        pitchingLevel = cursor.execute("SELECT Level FROM Player_Pitcher_MonthStats WHERE mlbId=? AND Year<=? ORDER BY Level ASC LIMIT 1", (id, cutoffYear)).fetchone()
-        hittingLevel = cursor.execute("SELECT LevelId FROM Player_Hitter_MonthStats WHERE mlbId=? AND Year<=? ORDER BY LevelId ASC LIMIT 1", (id, cutoffYear)).fetchone()
+        pitchingLevel = cursor.execute("SELECT Level FROM Player_Pitcher_MonthStats WHERE mlbId=? ORDER BY Level ASC LIMIT 1", (id,)).fetchone()
+        hittingLevel = cursor.execute("SELECT LevelId FROM Player_Hitter_MonthStats WHERE mlbId=? ORDER BY LevelId ASC LIMIT 1", (id,)).fetchone()
         
         if pitchingLevel == None:
             if hittingLevel == None: 
@@ -440,22 +450,22 @@ def _Set_Rookie_Hitters(db : sqlite3.Connection):
                         SELECT pcs.mlbId, SUM(pms.AB) FROM Player_CareerStatus AS pcs
                         INNER JOIN Player_Hitter_MonthStats AS pms ON pms.mlbId = pcs.mlbId
                         WHERE pcs.highestLevel='1'
-                        AND pms.level='1'
+                        AND pms.levelId='1'
                         AND pcs.mlbRookieYear IS NULL
                         AND pcs.careerStartYear>='2005'
                         GROUP BY pcs.mlbId
                         ''').fetchall()
 
-    for id, outs in tqdm(ids, desc="Setting Rookie Year for Hitters", leave=False):
-        if outs < 150:
+    for id, ab in tqdm(ids, desc="Setting Rookie Year for Hitters", leave=False):
+        if ab < 130:
             continue
         
-        yearlyOuts = cursor.execute("SELECT outs, year FROM Player_Pitcher_MonthStats WHERE mlbId=? AND level=? ORDER BY year ASC", (id,1)).fetchall()
-        cumOuts = 0
-        for outs, year in yearlyOuts:
-            if cumOuts < 150:
-                cumOuts += outs
-                if cumOuts >= 150:
+        yearlyOuts = cursor.execute("SELECT ab, year FROM Player_Hitter_MonthStats WHERE mlbId=? AND levelId=? ORDER BY year ASC", (id,1)).fetchall()
+        cumAbs = 0
+        for ab, year in yearlyOuts:
+            if ab < 130:
+                cumAbs += ab
+                if cumAbs >= 130:
                     cursor.execute("UPDATE Player_CareerStatus SET mlbRookieYear=? WHERE mlbId=?", (year, id))
                 
     cursor.execute("END TRANSACTION")
@@ -467,12 +477,12 @@ def _Set_Rookie_EndMonth(db : sqlite3.Connection):
     cursor.execute("BEGIN TRANSACTION")
     idData = cursor.execute('''SELECT mlbId, isHitter, mlbRookieYear 
                             FROM Player_CareerStatus 
-                            WHERE serviceEndYear IS NOT NULL
-                            AND serviceEndMonth IS NULL''').fetchall()
+                            WHERE mlbRookieYear IS NOT NULL
+                            AND mlbRookieMonth IS NULL''').fetchall()
 
-    for id, isHitter, rookieYear in tqdm(idData, desc="Updating Service End Month"):
+    for id, isHitter, rookieYear in tqdm(idData, desc="Updating Rookie End Month", leave=False):
         if isHitter:
-            monthData = cursor.execute("SELECT year, month, AB FROM Player_Hitter_MonthStats WHERE mlbId=? AND LevelId=?", (id, 1)).fetchall()
+            monthData = cursor.execute("SELECT year, month, AB FROM Player_Hitter_MonthStats WHERE mlbId=? AND LevelId=? ORDER BY Year ASC, month ASC", (id, 1)).fetchall()
             cumAb = 0
             rYear = 0
             rMonth = 0
@@ -484,7 +494,7 @@ def _Set_Rookie_EndMonth(db : sqlite3.Connection):
                     break
                 
         else:
-            monthData = cursor.execute("SELECT year, month, outs FROM Player_Pitcher_MonthStats WHERE mlbId=? AND Level=?", (id, 1)).fetchall()
+            monthData = cursor.execute("SELECT year, month, outs FROM Player_Pitcher_MonthStats WHERE mlbId=? AND Level=? ORDER BY Year ASC, month ASC", (id, 1)).fetchall()
             cumPa = 0
             rYear = 0
             rMonth = 0
@@ -497,9 +507,9 @@ def _Set_Rookie_EndMonth(db : sqlite3.Connection):
                 
         # Check if the year is the same
         if rYear == rookieYear:
-            cursor.execute("UPDATE Player_CareerStatus SET serviceEndMonth=? WHERE mlbId=?", (id, rMonth))
+            cursor.execute("UPDATE Player_CareerStatus SET mlbRookieMonth=? WHERE mlbId=?", (rMonth, id))
         else: # The years don't match, so set the eligibility to the end of the year that Player_CareerStatus has their rookie year
-            cursor.execute("UPDATE Player_CareerStatus SET serviceEndMonth=? WHERE mlbId=?", (id, 13))
+            cursor.execute("UPDATE Player_CareerStatus SET mlbRookieMonth=? WHERE mlbId=?", (13, id))
 
     cursor.execute("END TRANSACTION")
     db.commit()
@@ -570,23 +580,36 @@ def _Update_Signing_Year(db : sqlite3.Connection):
     
 # This function will only be called on year end, as it only updates statuses that change
 # At the end of a season
-def Update_Careers(db : sqlite3.Connection, year : int) -> None:
-    _Apply_Chadwick_Register(db)
-    _Update_Fangraphs_War(db, year)
+def Update_Careers(db : sqlite3.Connection, year : int, month : int) -> None:
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM Player_CareerStatus")
+    db.commit()
+    if month == 13:
+        _Apply_Chadwick_Register(db)
+        _Update_Fangraphs_War(db, year)
+    
     _Insert_Empty_Players(db)
     _Update_Positions(db)
     _Update_IsActive(db, year)
-    _Get_MLB_StartYear(db)
-    _Check_Service_Time(db)
-    _Set_Service_EndYear(db)
     _Set_CareerStartYear(db, year)
-    _Check_CareerStartYear_ForOldData(db)
-    _Check_Aged_Out_NoMLB(db, year)
-    _Check_Aged_Out_LateMLB(db, year)
-    _Ignore_Players(db)
+    _Get_MLB_StartYear(db)
     _Get_Highest_Level(db)
     _Set_Rookie_Pitchers(db)
     _Set_Rookie_Hitters(db)
     _Set_Rookie_EndMonth(db)
-    _Set_Service_Lapse(db, year)
+    _Check_Service_Time(db)
+    _Set_Service_EndYear(db)
+    
+    if month >= 9:
+        _Check_Aged_Out_NoMLB(db, year)
+        _Check_Aged_Out_LateMLB(db, year)
+    else:
+        _Check_Aged_Out_NoMLB(db, year - 1)
+        _Check_Aged_Out_LateMLB(db, year - 1)
+    _Ignore_Players(db)
+    
+    if month >= 9:
+        _Set_Service_Lapse(db, year)
+    else:
+        _Set_Service_Lapse(db, year - 1)
     _Update_Signing_Year(db)
