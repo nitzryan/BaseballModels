@@ -2,9 +2,9 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split # type: ignore
+from sklearn.decomposition import PCA # type: ignore
+from sklearn.preprocessing import StandardScaler # type: ignore
 import math
 import random
 from tqdm import tqdm
@@ -13,30 +13,50 @@ from Constants import db, D_TYPE
 
 NOT_DRAFTED_VALUE = 1000
 NOT_INIT_DRAFT_VALUE = 100
+CUTOFF_YEAR_DIF = 10
 levelMap = {1:0,11:1,12:2,13:3,14:4,15:5,16:6,17:7}
 np.set_printoptions(precision=2, linewidth=300, floatmode='fixed')
 
 cursor = db.cursor()
-hitters = cursor.execute('''
+hitters = None
+_cutoff_year = None
+
+def Init_Hitters(year : int):
+    global hitters
+    global _cutoff_year
+    _cutoff_year = year - CUTOFF_YEAR_DIF
+    
+    cursor = db.cursor()
+    hitters = cursor.execute('''
                          SELECT mp.mlbId, mp.ageAtSigningYear, p.draftPick
                          FROM Model_Players AS mp
                          INNER JOIN Player as p ON mp.mlbId = p.mlbId
+                         INNER JOIN Player_CareerStatus AS pcs ON mp.mlbId = pcs.mlbId
                          WHERE mp.isHitter='1'
-                         AND mp.validForTraining='1'
+                         AND pcs.careerStartYear<=?
                          AND p.position='hitting'
                          ORDER BY mp.mlbId
-                         ''').fetchall()
+                         ''', (_cutoff_year,)).fetchall()
+    
+    global age_mean
+    global age_std
+    global log_picks_mean
+    global log_picks_std
+    age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data()
 
-
-pitchers = cursor.execute('''
-                         SELECT mp.mlbId, mp.ageAtSigningYear, p.draftPick
-                         FROM Model_Players AS mp
-                         INNER JOIN Player as p ON mp.mlbId = p.mlbId
-                         WHERE mp.isPitcher='1'
-                         AND p.position='pitching'
-                         AND mp.validForTraining='1'
-                         ORDER BY mp.mlbId
-                         ''').fetchall()
+pitchers = None
+def Init_Pitchers(year : int):
+    global pitchers
+    cutoff_year = year - CUTOFF_YEAR_DIF
+    pitchers = cursor.execute('''
+                            SELECT mp.mlbId, mp.ageAtSigningYear, p.draftPick
+                            FROM Model_Players AS mp
+                            INNER JOIN Player as p ON mp.mlbId = p.mlbId
+                            WHERE mp.isPitcher='1'
+                            AND p.position='pitching'
+                            AND pcs.careerStartYear<=?
+                            ORDER BY mp.mlbId
+                            ''', (cutoff_year,)).fetchall()
 
 # Get Age and draft pick, which are done differently than other stats
 SIGNING_COMPONENTS = 3
@@ -59,11 +79,16 @@ def Get_Age_Draft_Data():
     log_picks_std = log_picks.float().std()
     return age_mean, age_std, log_picks_mean, log_picks_std
 
-age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data()
+age_mean, age_std, log_picks_mean, log_picks_std = (None, None, None, None)
+#
 
 # Input Normalization
 def Generate_Normalized_Stats(db, stats, table):
-    df = pd.read_sql_query(f"SELECT {stats} FROM {table} AS t INNER JOIN Model_Players AS mp ON mp.mlbId = t.mlbId WHERE mp.validForTraining='1'", db)
+    df = pd.read_sql_query(f'''SELECT {stats} 
+                           FROM {table} AS t 
+                           INNER JOIN Model_Players AS mp ON mp.mlbId = t.mlbId 
+                           INNER JOIN Player_CareerStatus AS pcs ON mp.mlbId = pcs.mlbId
+                           WHERE pcs.careerStartYear<="{_cutoff_year}"''', db)
     std_scaler = StandardScaler()
     scaled_stats = std_scaler.fit_transform(df)
     return scaled_stats, std_scaler
@@ -132,13 +157,7 @@ def Transform_Hitter(hitter_data):
     parkfactor_stats_df = pd.read_sql_query(f"SELECT {park_factors_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
     player_stats_df = pd.read_sql_query(f"SELECT {hitter_person_query} FROM Model_HitterStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
     
-    fielding_stats_pca = _pca_fielding.transform(_scaler_fielding.transform(fielding_stats_df))
-    hitting_stats_pca = _pca_hitting.transform(_scaler_hitting.transform(hitting_stats_df))
-    stealing_stats_pca = _pca_stealing.transform(_scaler_stealing.transform(stealing_stats_df))
-    parkfactor_stats_pca = _pca_parkfactors.transform(_scaler_parkfactors.transform(parkfactor_stats_df))
-    player_stats_pca = _pca_person.transform(_scaler_person.transform(player_stats_df))
-
-    hitter_input = torch.zeros(fielding_stats_pca.shape[0] + 1, _hitter_cols)
+    hitter_input = torch.zeros(fielding_stats_df.shape[0] + 1, _hitter_cols)
     initVal = torch.zeros(_hitter_cols, dtype=D_TYPE)
     initVal[0] = (signingAge - age_mean) / age_std
     if draftPick is not None:
@@ -147,16 +166,23 @@ def Transform_Hitter(hitter_data):
         initVal[1] = NOT_DRAFTED_VALUE
     initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
     initVal[2] = 1
-    
     hitter_input[0] = initVal
-    for i in range(fielding_stats_pca.shape[0]):
-        hitter_input[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
-                                        + list(fielding_stats_pca[i])
-                                        + list(hitting_stats_pca[i])
-                                        + list(stealing_stats_pca[i])
-                                        + list(parkfactor_stats_pca[i])
-                                        + list(player_stats_pca[i]), 
-                                        dtype=D_TYPE)
+        
+    if fielding_stats_df.shape[0] != 0:
+        fielding_stats_pca = _pca_fielding.transform(_scaler_fielding.transform(fielding_stats_df))
+        hitting_stats_pca = _pca_hitting.transform(_scaler_hitting.transform(hitting_stats_df))
+        stealing_stats_pca = _pca_stealing.transform(_scaler_stealing.transform(stealing_stats_df))
+        parkfactor_stats_pca = _pca_parkfactors.transform(_scaler_parkfactors.transform(parkfactor_stats_df))
+        player_stats_pca = _pca_person.transform(_scaler_person.transform(player_stats_df))
+
+        for i in range(fielding_stats_pca.shape[0]):
+            hitter_input[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
+                                            + list(fielding_stats_pca[i])
+                                            + list(hitting_stats_pca[i])
+                                            + list(stealing_stats_pca[i])
+                                            + list(parkfactor_stats_pca[i])
+                                            + list(player_stats_pca[i]), 
+                                            dtype=D_TYPE)
     
     highestLevel, pa, war, off, df, bsr = cursor.execute('''
                             SELECT pcs.highestLevel, SUM(mpw.pa), SUM(mpw.war), SUM(mpw.off), SUM(mpw.def), SUM(mpw.bsr)
@@ -164,8 +190,7 @@ def Transform_Hitter(hitter_data):
                             LEFT JOIN Model_PlayerWar as mpw ON pcs.mlbId = mpw.mlbId
                             WHERE pcs.mlbId=?
                             AND (mpw.isHitter='1' or mpw.isHitter IS NULL)
-                            AND pcs.position='hitting'
-                            AND pcs.isPrimaryPosition='1'
+                            AND pcs.isHitter IS NOT NULL
                             ''', (id,)).fetchone()
             
     
@@ -282,34 +307,22 @@ def Transform_Pitcher(pitcher_data):
     parkfactor_stats_df = pd.read_sql_query(f"SELECT {park_factors_query} FROM Model_PitcherStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
     player_stats_df = pd.read_sql_query(f"SELECT {pitcher_person_query} FROM Model_PitcherStats WHERE mlbId='{id}' ORDER BY YEAR ASC, Month ASC", db)
     
-    if pitching_stats_df.shape[0] == 0:
-        pitcher_input = torch.zeros(1, _pitcher_cols)
-        initVal = torch.zeros(_pitcher_cols, dtype=D_TYPE)
-        initVal[0] = (signingAge - age_mean) / age_std
-        if draftPick is not None:
-            initVal[1] = draftPick
-        else:
-            initVal[1] = NOT_DRAFTED_VALUE
-        initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
-        initVal[2] = 1
-        pitcher_input[0] = initVal
-        
+    pitcher_input = torch.zeros(pitching_stats_df.shape[0] + 1, _pitcher_cols)
+    initVal = torch.zeros(_pitcher_cols, dtype=D_TYPE)
+    initVal[0] = (signingAge - age_mean) / age_std
+    if draftPick is not None:
+        initVal[1] = draftPick
     else:
+        initVal[1] = NOT_DRAFTED_VALUE
+    initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
+    initVal[2] = 1
+    pitcher_input[0] = initVal
+    
+    if pitching_stats_df.shape[0] != 0:
         pitching_stats_pca = _pca_pitching.transform(_scaler_pitching.transform(pitching_stats_df))
         parkfactor_stats_pca = _pca_parkfactors.transform(_scaler_parkfactors.transform(parkfactor_stats_df))
         player_stats_pca = _pca_person.transform(_scaler_person.transform(player_stats_df))
 
-        pitcher_input = torch.zeros(pitching_stats_pca.shape[0] + 1, _pitcher_cols)
-        initVal = torch.zeros(_pitcher_cols, dtype=D_TYPE)
-        initVal[0] = (signingAge - age_mean) / age_std
-        if draftPick is not None:
-            initVal[1] = draftPick
-        else:
-            initVal[1] = NOT_DRAFTED_VALUE
-        initVal[1] = (math.log10(initVal[1]) - log_picks_mean) / log_picks_std
-        initVal[2] = 1
-        
-        pitcher_input[0] = initVal
         for i in range(pitching_stats_pca.shape[0]):
             pitcher_input[i + 1] = torch.tensor([initVal[0], initVal[1], 0]
                                             + list(pitching_stats_pca[i])
@@ -323,8 +336,7 @@ def Transform_Pitcher(pitcher_data):
                             LEFT JOIN Model_PlayerWar as mpw ON pcs.mlbId = mpw.mlbId
                             WHERE pcs.mlbId=?
                             AND (mpw.isHitter='0' or mpw.isHitter IS NULL)
-                            AND pcs.position='pitching'
-                            AND pcs.isPrimaryPosition='1'
+                            AND pcs.isPitcher IS NOT NULL
                             ''', (id,)).fetchone()
             
     

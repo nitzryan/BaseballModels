@@ -6,7 +6,7 @@ from torch.optim import lr_scheduler
 from tqdm import tqdm
 import sys
 
-from Player_Prep import Generate_Hitters, Generate_Hitter_Mutators, Generate_Test_Train
+from Player_Prep import Init_Hitters, Generate_Hitters, Generate_Hitter_Mutators, Generate_Test_Train
 from Model import RNN_Model, RNN_Classification_Loss
 from Constants import device
 from Model_Train import trainAndGraph
@@ -17,6 +17,8 @@ from Constants import db
 
 cursor = db.cursor()
 all_hitter_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='1'").fetchall()
+year = int(sys.argv[1])
+Init_Hitters(year)
 # Data for savings tests
 xs = []
 losses = []
@@ -51,7 +53,10 @@ draft_scale = 0.2
 signing_age_scale = 0.5
 
 batch_size = 800
-max_input_size = 79
+max_input_size = 0
+for i in hitter_input:
+    if i.shape[0] > max_input_size:
+        max_input_size = i.shape[0]
 
 # for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
     # test_size = x_var
@@ -79,8 +84,15 @@ num_layers = 5
 hidden_size = 30
 
 Setup_Players(all_hitter_ids, hitter_ids)
+model_name = sys.argv[2]
 
-for n in tqdm(range(int(sys.argv[1]))):
+cursor = db.cursor()
+cursor.execute(f'''DELETE FROM Model_TrainingHistory 
+               WHERE Year=? 
+               AND IsHitter="1" 
+               AND ModelName LIKE "{model_name}%"''', (year,))
+
+for n in tqdm(range(int(sys.argv[3]))):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
 
@@ -92,41 +104,23 @@ for n in tqdm(range(int(sys.argv[1]))):
     training_generator = torch.utils.data.DataLoader(train_hitters_dataset, batch_size=batch_size, shuffle=True)
     testing_generator = torch.utils.data.DataLoader(test_hitters_dataset, batch_size=batch_size, shuffle=False)
 
-    loss = trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, 10, early_stopping_cutoff=40, should_output=False)
-    model = f"test_run_hitters_{n}"
-    Delete_Model_Run_Hitter(model)
-    Generate_Model_Run_Hitter(model, network, device, leave_progress=False)
+    this_model_name = model_name + '_' + str(n) + '.pt'
+    loss = trainAndGraph(network, 
+                         training_generator, 
+                         testing_generator, 
+                         loss_function, 
+                         optimizer, 
+                         scheduler, 
+                         num_epochs, 
+                         10, 
+                         early_stopping_cutoff=40, 
+                         should_output=False,
+                         model_name="Models/" + this_model_name)
+    
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,?)", (this_model_name, year, True, loss))
+    db.commit()
+    # model = f"test_run_hitters_{n}"
+    # Delete_Model_Run_Hitter(model)
+    # Generate_Model_Run_Hitter(model, network, device, leave_progress=False)
 
-# xs.append(x_var)
-# losses.append(loss)
-   
-# Plot Heatmap
-# x_unique = np.unique(xs)
-# y_unique = np.unique(ys)
-# heatmap_data = np.zeros((len(y_unique), len(x_unique)))
-# for i in range(len(xs)):
-#     x_idx = np.where(x_unique == xs[i])[0][0]
-#     y_idx = np.where(y_unique == ys[i])[0][0]
-#     heatmap_data[y_idx, x_idx] = losses[i]
-
-# plt.subplots(figsize=(0.75 * len(x_unique) + 2.5, 0.75 * len(y_unique) + 2.5))
-# y_labels = [f"{y:.2f}" for y in y_unique]
-
-# sns.heatmap(heatmap_data, xticklabels=x_unique, yticklabels=y_labels, 
-#             cmap='flare', vmin=0.65, vmax=0.72, annot=True, fmt='.3f',
-#             square=True)
-
-# #plt.figure(figsize=(2 * len(x_unique) + 1, 2 * len(y_unique) + 1))
-# plt.xlabel('Hitting PCA Components')
-# plt.ylabel("Hitting Mutator Variance")
-# plt.title("Hitting Model Parameters")
-# plt.savefig('HittingParameters.png')
-# plt.show()
-
-# # Plot 2D
-# plt.plot(xs, losses, 'bo')
-# plt.xlabel('Test Size')
-# plt.ylabel('Test Loss')
-# plt.title('Test Loss vs Test Size')
-# # plt.savefig('img/TestSize.png')
-# plt.show()

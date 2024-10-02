@@ -68,7 +68,7 @@ def graphLoss(epoch_counter, train_loss_hist, test_loss_hist, loss_name="Loss", 
   plt.xlabel('#Epochs')
   plt.ylabel(loss_name)
 
-def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, logging_interval=1, early_stopping_cutoff=20, should_output=True, graph_y_range=None):
+def trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, logging_interval=1, early_stopping_cutoff=20, should_output=True, graph_y_range=None, model_name="no_name.pt"):
   #Arrays to store training history
   test_loss_history = [[],[],[]]
   epoch_counter = []
@@ -95,7 +95,7 @@ def trainAndGraph(network, training_generator, testing_generator, loss_function,
     if (test_loss[0] < best_loss):
       best_loss = test_loss[0]
       best_epoch = epoch
-      torch.save(network.state_dict(), 'best_model.pt')
+      torch.save(network.state_dict(), model_name)
       epochsSinceLastImprove = 0
     else:
       epochsSinceLastImprove += 1

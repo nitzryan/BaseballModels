@@ -86,37 +86,3 @@ for n in tqdm(range(int(sys.argv[1]))):
     model = f"test_run_pitchers_{n}"
     Delete_Model_Run_Pitcher(model)
     Generate_Model_Run_Pitcher(model, network, device, leave_progress=False)
-
-# xs.append(x_var)
-# losses.append(loss)
-   
-# Plot Heatmap
-# x_unique = np.unique(xs)
-# y_unique = np.unique(ys)
-# heatmap_data = np.zeros((len(y_unique), len(x_unique)))
-# for i in range(len(xs)):
-#     x_idx = np.where(x_unique == xs[i])[0][0]
-#     y_idx = np.where(y_unique == ys[i])[0][0]
-#     heatmap_data[y_idx, x_idx] = losses[i]
-
-# plt.subplots(figsize=(0.75 * len(x_unique) + 2.5, 0.75 * len(y_unique) + 2.5))
-# y_labels = [f"{y:.2f}" for y in y_unique]
-
-# sns.heatmap(heatmap_data, xticklabels=x_unique, yticklabels=y_labels, 
-#             cmap='flare', vmin=0.65, vmax=0.72, annot=True, fmt='.3f',
-#             square=True)
-
-# #plt.figure(figsize=(2 * len(x_unique) + 1, 2 * len(y_unique) + 1))
-# plt.xlabel('Hitting PCA Components')
-# plt.ylabel("Hitting Mutator Variance")
-# plt.title("Hitting Model Parameters")
-# plt.savefig('HittingParameters.png')
-# plt.show()
-
-# # Plot 2D
-# plt.plot(xs, losses, 'bo')
-# plt.xlabel('Test Size')
-# plt.ylabel('Test Loss')
-# plt.title('Test Loss vs Test Size')
-# # plt.savefig('img/TestSize.png')
-# plt.show()
