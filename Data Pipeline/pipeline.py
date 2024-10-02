@@ -32,6 +32,6 @@ if __name__ == '__main__':
     #Calculate_Pitcher_MonthStats(db, year, month)
     # Calculate_LevelStats(db, year, month)
     # Calculate_Ratios(db, year, month)
-    #Update_Careers(db, year, month)
+    Update_Careers(db, year, month)
     Model_Players(db, year, month)
     Model_MonthStats(db)

@@ -234,89 +234,6 @@ def _Set_CareerStartYear(db : sqlite3.Connection, year : int):
     cursor.execute("END TRANSACTION")
     db.commit()
     
-# This should only be run once
-# Commented so that it is not accidentally run again, left in case the db breaks
-# def _Check_CareerStartYear_ForOldData(db : sqlite3.Connection):
-#     db.rollback()
-#     cursor = db.cursor()
-#     noCareerStartData = cursor.execute('''SELECT mlbId 
-#                                        FROM Player_CareerStatus 
-#                                        WHERE careerStartYear IS NULL 
-#                                        ORDER BY mlbId ASC''').fetchall()
-#     lenData = len(noCareerStartData)
-#     if lenData == 0:
-#         return
-    
-#     NUM_THREADS = 24
-#     dbData = [[] for _ in range(NUM_THREADS)]
-#     threadCompleteCounts = [0] * NUM_THREADS
-
-#     def ThreadingFunction(threadIdx, data):
-#         for i, (id,) in enumerate(data):
-#             response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{id}?hydrate=currentTeam,team,stats(type=[yearByYear](team(league)),leagueListId=mlb_milb)&site=en")
-#             if response.status_code != 200:
-#                 print(f"Error for id={id}: {response.status_code}")
-#                 continue
-            
-#             jsonData = response.json()
-#             try:
-#                 year = None
-#                 for splitData in jsonData["people"][0]["stats"][0]["splits"]:
-#                     if splitData["sport"]["id"] > 16:
-#                         continue
-#                     if splitData["league"]["id"] == MEXICAN_LEAGUE_ID:
-#                         continue
-#                     year = int(splitData["season"])
-#                     break
-#                 if year < 2005:
-#                     dbData[threadIdx].append((id,year))
-#             except Exception as e:
-#                 dbData[threadIdx].append((id,0))
-            
-#             threadCompleteCounts[threadIdx] = i + 1
-        
-    
-        
-#     threads = []
-#     for i in range(NUM_THREADS):
-#         thread = threading.Thread(target=ThreadingFunction, args=[i, noCareerStartData[
-#             i * lenData // NUM_THREADS : (i + 1) * lenData // NUM_THREADS
-#         ]])
-#         thread.start()
-#         threads.append(thread)
-        
-#     # Progress Bar
-#     progressBar = tqdm(total=len(noCareerStartData))
-#     # Start progress bar
-#     keepTimerRunning = True
-#     def UpdateTimer():
-#         if keepTimerRunning:
-#             threading.Timer(5.0, UpdateTimer).start()
-        
-#         count = 0
-#         threadCompleteCounts
-#         for i in range(NUM_THREADS):
-#             count += threadCompleteCounts[i]
-        
-#         progressBar.n = count
-#         progressBar.last_print_n = progressBar.n
-#         progressBar.refresh()
-        
-#     UpdateTimer()
-
-#     for thread in threads:
-#         thread.join()
-        
-#     keepTimerRunning = False
-
-#     cursor.execute("BEGIN TRANSACTION")
-#     for data in dbData:
-#         for (id,year) in data:
-#             cursor.execute("INSERT INTO Pre05_Players('mlbId','careerStartYear') VALUES(?,?)", (id, year))
-        
-#     cursor.execute("END TRANSACTION")
-#     db.commit()
-    
 def _Check_Aged_Out_NoMLB(db : sqlite3.Connection, year : int):
     db.rollback()
     cursor = db.cursor()
@@ -436,6 +353,7 @@ def _Set_Rookie_Pitchers(db : sqlite3.Connection):
                 cumOuts += outs
                 if cumOuts >= 150:
                     cursor.execute("UPDATE Player_CareerStatus SET mlbRookieYear=? WHERE mlbId=?", (year, id))
+                    break
                 
     cursor.execute("END TRANSACTION")
     db.commit()
@@ -467,6 +385,7 @@ def _Set_Rookie_Hitters(db : sqlite3.Connection):
                 cumAbs += ab
                 if cumAbs >= 130:
                     cursor.execute("UPDATE Player_CareerStatus SET mlbRookieYear=? WHERE mlbId=?", (year, id))
+                    break
                 
     cursor.execute("END TRANSACTION")
     db.commit()
