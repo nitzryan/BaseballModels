@@ -13,7 +13,7 @@ from Model_Train import trainAndGraph
 from Dataset import HitterDataset
 
 from Output import Delete_Model_Run_Hitter, Generate_Model_Run_Hitter, Setup_Players
-from Constants import db
+from Constants import db, h_stealing_components, h_person_components, h_fielding_components, h_hitting_components, h_init_components, h_park_components
 
 cursor = db.cursor()
 all_hitter_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='1'").fetchall()
@@ -24,12 +24,12 @@ xs = []
 losses = []
 
 # Create Input, Output Data
-fielding_components = 4
-hitting_components = 5
-stealing_components = 1
-park_components = 2
-person_components = 3
-init_components = 3
+fielding_components = h_fielding_components
+hitting_components = h_hitting_components
+stealing_components = h_stealing_components
+park_components = h_park_components
+person_components = h_person_components
+init_components = h_init_components
 
 input_size = fielding_components + hitting_components + stealing_components + park_components + person_components + init_components
 
@@ -92,6 +92,13 @@ cursor.execute(f'''DELETE FROM Model_TrainingHistory
                AND IsHitter="1" 
                AND ModelName LIKE "{model_name}%"''', (year,))
 
+# Get the next model idx
+last_model_idx = cursor.execute("SELECT DISTINCT ModelIdx FROM Model_TrainingHistory ORDER BY ModelIdx DESC LIMIT 1").fetchone()
+if last_model_idx == None:
+    model_idx = 1
+else:
+    model_idx = last_model_idx[0] + 1
+
 for n in tqdm(range(int(sys.argv[3]))):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
@@ -118,7 +125,7 @@ for n in tqdm(range(int(sys.argv[3]))):
                          model_name="Models/" + this_model_name)
     
     cursor = db.cursor()
-    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,?)", (this_model_name, year, True, loss))
+    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,?,?,?,?)", (this_model_name, year, True, loss, num_layers, hidden_size, model_idx))
     db.commit()
     # model = f"test_run_hitters_{n}"
     # Delete_Model_Run_Hitter(model)

@@ -10,3 +10,10 @@ else:
 db = sqlite3.connect("../BaseballStats.db")
 
 D_TYPE = torch.float32
+
+h_fielding_components = 4
+h_hitting_components = 5
+h_stealing_components = 1
+h_park_components = 2
+h_person_components = 3
+h_init_components = 3
