@@ -23,7 +23,14 @@ def Model_Players(db : sqlite3.Connection, year : int, month : int):
             continue # Player was validly added, so don't add invalid player
         
         # Determine last MLB Season
-        lastMLBSeason = 0
+        if agedOut is not None:
+            lastMLBSeason = agedOut
+        elif serviceLapseYear is not None:
+            lastMLBSeason = serviceLapseYear
+        elif serviceEndYear is not None:
+            lastMLBSeason = serviceEndYear
+        else:
+            lastMLBSeason = year
         
         # Last prospect year/month
         if agedOut is not None and agedOut != 0:

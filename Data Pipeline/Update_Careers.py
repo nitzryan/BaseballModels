@@ -4,7 +4,7 @@ import pandas as pd
 import io
 from tqdm import tqdm
 import pybaseball
-import threading
+import warnings
 from Constants import MEXICAN_LEAGUE_ID
 
 def _Apply_Chadwick_Register(db : sqlite3.Connection):
@@ -16,47 +16,59 @@ def _Apply_Chadwick_Register(db : sqlite3.Connection):
     cursor = db.cursor()
     cursor.execute("BEGIN TRANSACTION")
 
-    for num in tqdm(FILE_NUM, desc="Reading Chadwick Files", leave=False):
-        file = FILE_NAME + str(num) + FILE_EXT
-        response = requests.get(file)
-        if response.status_code != 200:
-            print(f"Failed to Get {file} : {response.status_code}")
-            continue
-        
-        reqData = response.content
-        df = pd.read_csv(io.StringIO(reqData.decode('utf-8')), on_bad_lines="skip")
-        df = df[df['key_fangraphs'].notna()][df['key_mlbam'].notna()]
-        df['key_mlbam'] = df['key_mlbam'].astype('Int64')
-        df['key_fangraphs'] = df['key_fangraphs'].astype('Int64')
-        for row in df.itertuples():
-            cursor.execute(f"UPDATE Player Set fangraphsId='{row.key_fangraphs}' WHERE mlbId='{row.key_mlbam}'")
-        
-    cursor.execute("END TRANSACTION")
-    db.commit()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        for num in tqdm(FILE_NUM, desc="Reading Chadwick Files", leave=False):
+            file = FILE_NAME + str(num) + FILE_EXT
+            response = requests.get(file)
+            if response.status_code != 200:
+                print(f"Failed to Get {file} : {response.status_code}")
+                continue
+            
+            reqData = response.content
+            df = pd.read_csv(io.StringIO(reqData.decode('utf-8')), on_bad_lines="skip", low_memory=False)
+            df = df[df['key_fangraphs'].notna()][df['key_mlbam'].notna()]
+            df['key_mlbam'] = df['key_mlbam'].astype('Int64')
+            df['key_fangraphs'] = df['key_fangraphs'].astype('Int64')
+            for row in df.itertuples():
+                cursor.execute(f"UPDATE Player Set fangraphsId='{row.key_fangraphs}' WHERE mlbId='{row.key_mlbam}'")
+            
+        cursor.execute("END TRANSACTION")
+        db.commit()
 
 def _Update_Fangraphs_War(db : sqlite3.Connection, year):
     cursor = db.cursor()
+    cursor.execute("DELETE FROM Player_YearlyWar WHERE year=?", (year,))
+    db.commit()
+    cursor = db.cursor()
+    
     cursor.execute("BEGIN TRANSACTION")
     hittingStats = pybaseball.batting_stats(year, qual=0, stat_columns=["PA", "BsR", "Off", "Def", "WAR", "OPS"])
     for row in hittingStats.itertuples():
-        mlbId = cursor.execute("SELECT mlbId FROM Player WHERE fangraphsId=?", (row.IDfg,)).fetchone()[0]
-        if mlbId == None or cursor.execute("SELECT COUNT(*) FROM Player_YearlyWar WHERE mlbId=? AND year=? AND position=?", (mlbId, year, "hitting")).fetchone()[0] > 0:
-            continue
-        
-        cursor.execute("INSERT INTO Player_YearlyWar VALUES(?,?,?,?,?,?,?,?)", (mlbId, year, "hitting", row.PA, row.WAR, row.Off, row.Def, row.BsR))
+        try:
+            mlbId = cursor.execute("SELECT mlbId FROM Player WHERE fangraphsId=?", (row.IDfg,)).fetchone()[0]
+            if mlbId == None or cursor.execute("SELECT COUNT(*) FROM Player_YearlyWar WHERE mlbId=? AND year=? AND position=?", (mlbId, year, "hitting")).fetchone()[0] > 0:
+                continue
+            
+            cursor.execute("INSERT INTO Player_YearlyWar VALUES(?,?,?,?,?,?,?,?)", (mlbId, year, "hitting", row.PA, row.WAR, row.Off, row.Def, row.BsR))
+        except: # Player doesn't exist in table
+            pass
     
     
     # Similar to above, W is needed
     pitchingStats = pybaseball.pitching_stats(year, qual=0, stat_columns = ["IP", "WAR", "W"])
     for row in pitchingStats.itertuples():
-        mlbId = cursor.execute("SELECT mlbId FROM Player WHERE fangraphsId=?", (row.IDfg,)).fetchone()[0]
-        if mlbId == None or cursor.execute("SELECT COUNT(*) FROM Player_YearlyWar WHERE mlbId=? AND year=? and position=?", (mlbId, year, "pitching")).fetchone()[0] > 0:
-            continue
-        
-        innings, subinnings = str(row.IP).split('.')
-        outs = 3 * int(innings) + int(subinnings)
-        
-        cursor.execute("INSERT INTO Player_YearlyWar VALUES(?,?,?,?,?,?,?,?)", (mlbId, year, "pitching", outs, row.WAR, 0, 0, 0))
+        try:
+            mlbId = cursor.execute("SELECT mlbId FROM Player WHERE fangraphsId=?", (row.IDfg,)).fetchone()[0]
+            if mlbId == None or cursor.execute("SELECT COUNT(*) FROM Player_YearlyWar WHERE mlbId=? AND year=? and position=?", (mlbId, year, "pitching")).fetchone()[0] > 0:
+                continue
+            
+            innings, subinnings = str(row.IP).split('.')
+            outs = 3 * int(innings) + int(subinnings)
+            
+            cursor.execute("INSERT INTO Player_YearlyWar VALUES(?,?,?,?,?,?,?,?)", (mlbId, year, "pitching", outs, row.WAR, 0, 0, 0))
+        except:
+            pass
         
     cursor.execute("END TRANSACTION")
     
@@ -253,7 +265,7 @@ def _Check_Aged_Out_NoMLB(db : sqlite3.Connection, year : int):
         if birthYear < cutoffYear:
             agedOut = birthYear + AGED_OUT_AGE
         else:
-            agedOut = 0
+            agedOut = None
             
         cursor.execute("UPDATE Player_CareerStatus SET agedOut=? WHERE mlbId=?", (agedOut, id))
 
@@ -274,7 +286,7 @@ def _Check_Aged_Out_LateMLB(db : sqlite3.Connection, year : int):
         if startYear - birthYear > AGED_OUT_AGE:
             agedOut = birthYear + AGED_OUT_AGE
         else:
-            agedOut = 0
+            agedOut = None
             
         cursor.execute("UPDATE Player_CareerStatus SET agedOut=? WHERE mlbId=?", (agedOut, id))
 
@@ -503,10 +515,9 @@ def Update_Careers(db : sqlite3.Connection, year : int, month : int) -> None:
     cursor = db.cursor()
     cursor.execute("DELETE FROM Player_CareerStatus")
     db.commit()
-    if month == 13:
-        _Apply_Chadwick_Register(db)
-        _Update_Fangraphs_War(db, year)
     
+    _Apply_Chadwick_Register(db)
+    _Update_Fangraphs_War(db, year)
     _Insert_Empty_Players(db)
     _Update_Positions(db)
     _Update_IsActive(db, year)

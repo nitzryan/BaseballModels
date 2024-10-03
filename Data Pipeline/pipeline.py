@@ -18,10 +18,9 @@ if __name__ == '__main__':
     year = int(sys.argv[1])
     month = int(sys.argv[2])
     db = sqlite3.connect("../BaseballStats.db")
-    if month == 13:
+    if month == 0:
         Update_ServiceTime(db, year)
         Update_Careers(db, year, month)
-        Model_PlayerWar(db)
         exit(0)
     
     #Get_Players(db, year)
@@ -34,4 +33,5 @@ if __name__ == '__main__':
     # Calculate_Ratios(db, year, month)
     Update_Careers(db, year, month)
     Model_Players(db, year, month)
+    Model_PlayerWar(db)
     Model_MonthStats(db)
