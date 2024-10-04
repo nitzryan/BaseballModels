@@ -13,6 +13,7 @@ from Update_ServiceTime import Update_ServiceTime
 from Model_Players import Model_Players
 from Model_MonthStats import Model_MonthStats
 from Model_PlayerWar import Model_PlayerWar
+from Annual_Stats import Annual_Stats
 
 if __name__ == '__main__':
     year = int(sys.argv[1])
@@ -31,7 +32,7 @@ if __name__ == '__main__':
     Calculate_Hitter_MonthStats(db, year, month)
     Calculate_Pitcher_MonthStats(db, year, month)
     Calculate_Ratios(db, year, month)
-    
+    Annual_Stats(db, year)
     
     Update_Careers(db, year, month)
     Model_Players(db, year, month)
