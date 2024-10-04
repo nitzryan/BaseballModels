@@ -11,7 +11,7 @@ def _Clear_Data(db: sqlite3.Connection, year : int, month : int):
 def _Calculate_HitterStats(db: sqlite3.Connection, year : int, month : int):
     cursor = db.cursor()
     for level in tqdm(SPORT_IDS, desc="Hitter Level Stats", leave=False):
-        ab, h, doubles, triples, hr, k, bb, sb, cs, hbp = cursor.execute('SELECT SUM(AB), SUM(H), SUM("2B"), SUM("3B"), SUM(HR), SUM(K), SUM(BB), SUM(SB), SUM(CS), SUM(HBP) FROM Player_Hitter_MonthStats WHERE Year=? AND Month=? AND LevelId=?', (year, month, level)).fetchone()
+        ab, h, doubles, triples, hr, k, bb, sb, cs, hbp = cursor.execute('SELECT SUM(AB), SUM(H), SUM("2B"), SUM("3B"), SUM(HR), SUM(K), SUM(BB), SUM(SB), SUM(CS), SUM(HBP) FROM Player_Hitter_GameLog WHERE Year=? AND Month=? AND Level=?', (year, month, level)).fetchone()
         
         # Some year/level combos do not have any games
         if ab == 0 or ab == None:
@@ -40,7 +40,7 @@ def _Calculate_HitterStats(db: sqlite3.Connection, year : int, month : int):
 def _Calculate_PitcherStats(db: sqlite3.Connection, year : int, month : int):        
     cursor = db.cursor()
     for level in tqdm(SPORT_IDS, desc="Pitcher Level Stats", leave=False):
-        bf, outs, go, ao, r, er, h, k, bb, hbp, doubles, triples, hr = cursor.execute('SELECT SUM(battersFaced), SUM(outs), SUM(go), SUM(ao), SUM(r), SUM(er), SUM(h), SUM(k), SUM(bb), SUM(hbp), SUM("2B"), SUM("3B"), SUM(HR) FROM Player_Pitcher_MonthStats WHERE Year=? AND Month=? AND Level=?', (year, month, level)).fetchone()
+        bf, outs, go, ao, r, er, h, k, bb, hbp, doubles, triples, hr = cursor.execute('SELECT SUM(battersFaced), SUM(outs), SUM(go), SUM(ao), SUM(r), SUM(er), SUM(h), SUM(k), SUM(bb), SUM(hbp), SUM("2B"), SUM("3B"), SUM(HR) FROM Player_Pitcher_GameLog WHERE Year=? AND Month=? AND Level=?', (year, month, level)).fetchone()
         
         # Some year/level combos do not have any games
         if bf == 0 or bf == None:

@@ -10,10 +10,10 @@ NUM_THREADS = 16
 threadOutputs = [[]] * NUM_THREADS
 threadCompleteCounts = [0] * NUM_THREADS
 
-def _ReadPlayer(mlbId, position, threadIdx):
+def _ReadPlayer(mlbId, threadIdx):
     response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{mlbId}?hydrate=currentTeam,team,stats(type=[yearByYear](team(league)),leagueListId=mlb_milb)&site=en")
     if response.status_code != 200:
-        print(f"Status code {response.status_code} for {mlbId} {position}")
+        print(f"Status code {response.status_code} for {mlbId}")
         return
     
     try:
@@ -26,7 +26,7 @@ def _ReadPlayer(mlbId, position, threadIdx):
         birthdateFormatted = person["birthDate"]
         birthYear, birthMonth, birthDate = birthdateFormatted.split("-")
         global threadOutputs
-        threadOutputs[threadIdx].append((mlbId, position, useFirstName, useLastName, bats, throws, birthYear, birthMonth, birthDate))
+        threadOutputs[threadIdx].append((mlbId, useFirstName, useLastName, bats, throws, birthYear, birthMonth, birthDate))
         
     except Exception as e:
         print(f"Exception {e} for {mlbId}")
@@ -34,8 +34,8 @@ def _ReadPlayer(mlbId, position, threadIdx):
     
 def _ReadPlayers(threadIdx, unsetPlayers):
     global threadCompleteCounts
-    for mlbId, position in unsetPlayers[threadIdx * len(unsetPlayers) // NUM_THREADS : (threadIdx + 1) * len(unsetPlayers) // NUM_THREADS]:
-        _ReadPlayer(mlbId, position, threadIdx)
+    for mlbId, in unsetPlayers[threadIdx * len(unsetPlayers) // NUM_THREADS : (threadIdx + 1) * len(unsetPlayers) // NUM_THREADS]:
+        _ReadPlayer(mlbId, threadIdx)
         threadCompleteCounts[threadIdx] += 1
 
 def _Get_Players_Through_Stats(db : sqlite3.Connection, year : int):
@@ -70,6 +70,7 @@ def _Get_Players_Through_Stats(db : sqlite3.Connection, year : int):
         cursor = db.cursor()
 
 def _Get_Player_Bios(db : sqlite3.Connection):
+    cursor = db.cursor()
     unsetPlayers = cursor.execute("SELECT DISTINCT mlbId FROM Player WHERE birthYear IS NULL").fetchall()
     threads = []
     for i in range(NUM_THREADS):
@@ -105,10 +106,10 @@ def _Get_Player_Bios(db : sqlite3.Connection):
     cursor.execute("BEGIN TRANSACTION")
 
     for threadOutput in threadOutputs:
-        for mlbId, position, useFirstName, useLastName, bats, throws, birthYear, birthMonth, birthDate in threadOutput:
+        for mlbId, useFirstName, useLastName, bats, throws, birthYear, birthMonth, birthDate in threadOutput:
         # for data in threadOutput:
             # cursor.execute(f"UPDATE Player SET birthYear='{birthYear}', birthMonth='{birthMonth}', birthDate='{birthDate}', bats='{bats}', throws='{throws}', useFirstName='{useFirstName}', useLastName='{useLastName}' WHERE mlbId='{mlbId}' AND position='{position}'")
-            cursor.execute("UPDATE Player SET birthYear=?, birthMonth=?, birthDate=?, bats=?, throws=?, useFirstName=?,  useLastName=? WHERE mlbId=? AND position=?", (birthYear, birthMonth, birthDate, bats, throws, useFirstName, useLastName, mlbId, position))
+            cursor.execute("UPDATE Player SET birthYear=?, birthMonth=?, birthDate=?, bats=?, throws=?, useFirstName=?,  useLastName=? WHERE mlbId=?", (birthYear, birthMonth, birthDate, bats, throws, useFirstName, useLastName, mlbId))
     cursor.execute("END TRANSACTION")
     db.commit()
 
