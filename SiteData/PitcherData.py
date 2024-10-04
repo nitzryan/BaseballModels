@@ -6,7 +6,11 @@ db = sqlite3.connect("../BaseballStats.db")
 cursor = db.cursor()
 
 # Go player by player
-ids = cursor.execute("SELECT DISTINCT mlbId FROM Output_AggregatePitcherWar").fetchall()
+ids = cursor.execute('''SELECT DISTINCT o.mlbId 
+                     FROM Output_PlayerWar AS o
+                     INNER JOIN Model_TrainingHistory AS m
+                     ON o.modelIdx = m.ModelIdx
+                     WHERE m.IsHitter="0"''').fetchall()
 for id, in tqdm(ids):
     data = {"models_pitcher":[]}
     # Go Model by Model

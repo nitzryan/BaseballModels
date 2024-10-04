@@ -325,7 +325,7 @@ def _Get_Highest_Level(db: sqlite3.Connection):
             if hittingLevel == None: # Only pitching stats
                 highestLevel = pitchingLevel[0]
             else: # both stats, choose highest level
-                if pitchingLevel[0] < pitchingLevel[0]:
+                if pitchingLevel[0] < hittingLevel[0]:
                     highestLevel = pitchingLevel[0]
                 else:
                     highestLevel = hittingLevel[0]
