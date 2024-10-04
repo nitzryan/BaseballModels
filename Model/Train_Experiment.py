@@ -5,76 +5,92 @@ import numpy as np
 from torch.optim import lr_scheduler
 from tqdm import tqdm
 
-from Player_Prep import Generate_Pitchers, Generate_Pitcher_Mutators, Generate_Test_Train
+from Player_Prep import Generate_Hitters, Generate_Hitter_Mutators, Generate_Test_Train, Init_Hitters
 from Model import RNN_Model, RNN_Classification_Loss
 from Constants import device
 from Model_Train import trainAndGraph
-from Dataset import PitcherDataset
+from Dataset import HitterDataset
 
-from Output import Delete_Model_Run_Pitcher, Generate_Model_Run_Pitcher, Setup_Pitchers
-from Constants import db
+from Constants import db, h_fielding_components, h_hitting_components, h_init_components, h_park_components, h_person_components, h_stealing_components
 
 cursor = db.cursor()
-all_pitcher_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='0'").fetchall()
+all_hitter_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='1'").fetchall()
+year = int(2023)
+Init_Hitters(year)
 # Data for savings tests
 xs = []
 ys = []
 losses = []
 
 # Create Input, Output Data
-pitching_components = 5
-park_components = 2
-person_components = 3
-init_components = 3
+fielding_components = h_fielding_components
+hitting_components = h_hitting_components
+stealing_components = h_stealing_components
+park_components = h_park_components
+person_components = h_person_components
+init_components = h_init_components
 
-input_size = pitching_components + park_components + person_components + init_components
+input_size = fielding_components + hitting_components + stealing_components + park_components + person_components + init_components
 
-pitcher_input, pitcher_output, (pitching_stddev,
-                                park_stddev,
-                            person_stddev), pitcher_ids = Generate_Pitchers(pitching_components,
+hitter_input, hitter_output, (fielding_stddev,
+                            hitting_stddev,
+                            stealing_stddev,
+                            park_stddev,
+                            person_stddev), hitter_ids = Generate_Hitters(fielding_components,
+                        hitting_components,
+                        stealing_components,
                         park_components,
                         person_components)
 
 # Create mutations to create synthetic data
-pitching_scale = 0.2
+fielding_scale = 0.6
+hitting_scale = 0.2
+stealing_scale = 0.3
+park_scale = 0.1
 person_scale = 0.3
 draft_scale = 0.2
-park_scale = 0.1
 signing_age_scale = 0.5
 
 batch_size = 800
-max_input_size = 79
+max_input_size = 0
+for i in hitter_input:
+    if i.shape[0] > max_input_size:
+        max_input_size = i.shape[0]
 
-for x_var in tqdm(range(400, 1601, 200), desc="Num Components"):
-    batch_size = x_var
-    # for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
-        # test_size = x_var
-    pitching_mutators = Generate_Pitcher_Mutators(batch_size, max_input_size,
-                            pitching_components,pitching_scale,pitching_stddev,
-                            park_components, park_scale, park_stddev,
-                            person_components, person_scale, person_stddev,
-                            draft_scale, signing_age_scale)
+# for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
+    # test_size = x_var
+hitting_mutators = Generate_Hitter_Mutators(batch_size, max_input_size,
+                    fielding_components,fielding_scale,fielding_stddev,
+                    hitting_components, hitting_scale, hitting_stddev,
+                    stealing_components, stealing_scale, stealing_stddev,
+                    park_components, park_scale, park_stddev,
+                    person_components, person_scale, person_stddev,
+                    draft_scale, signing_age_scale)
 
-    # Prepare data in form for PyTorch
-    test_size = 0.2
-    random_state = 1
+# Prepare data in form for PyTorch
+test_size = 0.2
+random_state = 1
 
-    x_train_padded, x_test_padded, y_train_padded, y_test_padded, train_lengths, test_lengths = Generate_Test_Train(
-        pitcher_input, pitcher_output, test_size, random_state)
+x_train_padded, x_test_padded, y_train_padded, y_test_padded, train_lengths, test_lengths = Generate_Test_Train(
+    hitter_input, hitter_output, test_size, random_state)
 
-    train_pitchers_dataset = PitcherDataset(x_train_padded, train_lengths, y_train_padded)
-    test_pitchers_dataset = PitcherDataset(x_test_padded, test_lengths, y_test_padded)
+train_hitters_dataset = HitterDataset(x_train_padded, train_lengths, y_train_padded)
+test_hitters_dataset = HitterDataset(x_test_padded, test_lengths, y_test_padded)
 
+training_generator = torch.utils.data.DataLoader(train_hitters_dataset, batch_size=batch_size, shuffle=True)
+testing_generator = torch.utils.data.DataLoader(test_hitters_dataset, batch_size=batch_size, shuffle=False)
     # Train Model
-    for y_var in tqdm(np.arange(0.001, 0.0071, 0.001), desc="Mutator Variance", leave=False):
+for x_var in tqdm(range(1, 10), desc="Num Layers"):
+    for y_var in tqdm(range(10, 91, 10), desc="Hidden Size", leave=False):
         lr = 0.003
         dropout_perc = 0.0
         num_layers = 5
         hidden_size = 30
 
-        lr = y_var
+        num_layers = x_var
+        hidden_size = y_var
 
-        network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, pitching_mutators)
+        network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
         network = network.to(device)
 
         optimizer = torch.optim.Adam(network.parameters(), lr=lr)
@@ -82,13 +98,13 @@ for x_var in tqdm(range(400, 1601, 200), desc="Num Components"):
         loss_function = RNN_Classification_Loss
 
         num_epochs = 300
-        training_generator = torch.utils.data.DataLoader(train_pitchers_dataset, batch_size=batch_size, shuffle=True)
-        testing_generator = torch.utils.data.DataLoader(test_pitchers_dataset, batch_size=batch_size, shuffle=False)
 
         loss = trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, 10, early_stopping_cutoff=40, should_output=False)
         xs.append(x_var)
         ys.append(y_var)
         losses.append(loss)
+        del network, optimizer
+        torch.cuda.empty_cache()
    
 # Plot Heatmap
 x_unique = np.unique(xs)
@@ -103,20 +119,12 @@ plt.subplots(figsize=(0.75 * len(x_unique) + 2.5, 0.75 * len(y_unique) + 2.5))
 y_labels = [f"{y:.2f}" for y in y_unique]
 
 sns.heatmap(heatmap_data, xticklabels=x_unique, yticklabels=y_labels, 
-            cmap='flare', vmin=0.63, vmax=0.72, annot=True, fmt='.3f',
+            cmap='flare', annot=True, fmt='.3f',
             square=True)
 
 #plt.figure(figsize=(2 * len(x_unique) + 1, 2 * len(y_unique) + 1))
-plt.xlabel('Batch Size')
-plt.ylabel("Learning Rate")
-plt.title("Training Parameters")
-plt.savefig('img/PitchingTrainingParameters.png')
+plt.xlabel('Num Layers')
+plt.ylabel("Hidden Size")
+plt.title("Model Parameters")
+plt.savefig('img/ModelSizeParametersParameters.png')
 plt.show()
-
-# # Plot 2D
-# plt.plot(xs, losses, 'bo')
-# plt.xlabel('Test Size')
-# plt.ylabel('Test Loss')
-# plt.title('Test Loss vs Test Size')
-# # plt.savefig('img/TestSize.png')
-# plt.show()

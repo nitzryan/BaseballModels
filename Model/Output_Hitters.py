@@ -68,7 +68,7 @@ for model, _, hidden_size, num_layers, _ in tqdm(models, desc="Creating Networks
 
 ## Iterate each hitter through each model
 cursor.execute("BEGIN TRANSACTION")
-for i, input_data in tqdm(enumerate(hitter_inputs), desc="Evaluating Players on each model", leave=False):
+for i, input_data in tqdm(enumerate(hitter_inputs), desc="Evaluating Players on each model", leave=False, total=len(hitter_inputs)):
     input_length = input_data.shape[0]
     war_values = torch.zeros((len(networks), input_length, WAR_BUCKETS.shape[0]))
     for j, network in enumerate(networks):

@@ -80,8 +80,8 @@ test_hitters_dataset = HitterDataset(x_test_padded, test_lengths, y_test_padded)
 
 # Train Model
 dropout_perc = 0.0
-num_layers = 5
-hidden_size = 30
+num_layers = 2
+hidden_size = 80
 
 Setup_Players(all_hitter_ids, hitter_ids)
 model_name = sys.argv[2]
@@ -91,6 +91,8 @@ cursor.execute(f'''DELETE FROM Model_TrainingHistory
                WHERE Year=? 
                AND IsHitter="1" 
                AND ModelName LIKE "{model_name}%"''', (year,))
+db.commit()
+cursor = db.cursor()
 
 # Get the next model idx
 last_model_idx = cursor.execute("SELECT DISTINCT ModelIdx FROM Model_TrainingHistory ORDER BY ModelIdx DESC LIMIT 1").fetchone()
@@ -125,7 +127,7 @@ for n in tqdm(range(int(sys.argv[3]))):
                          model_name="Models/" + this_model_name)
     
     cursor = db.cursor()
-    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,?,?,?,?)", (this_model_name, year, True, loss, num_layers, hidden_size, model_idx))
+    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,ROUND(?,3),?,?,?)", (this_model_name, year, True, loss, num_layers, hidden_size, model_idx))
     db.commit()
     # model = f"test_run_hitters_{n}"
     # Delete_Model_Run_Hitter(model)
