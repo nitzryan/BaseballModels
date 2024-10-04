@@ -7,11 +7,13 @@ def Model_PlayerWar(db : sqlite3.Connection):
     cursor.execute("BEGIN TRANSACTION")
     cursor.execute("DELETE FROM Model_PlayerWar")
 
-    ids = cursor.execute('''SELECT mlbId, lastMLBSeason, isHitter 
+    ids = cursor.execute('''SELECT mlbId, lastMLBSeason, isHitter
                         FROM Model_Players
                         WHERE lastMLBSeason IS NOT NULL''').fetchall()
 
     for id, lastSeason, isHitter in tqdm(ids):
+        if isHitter is None:
+            isHitter = 0
         warData = cursor.execute('''SELECT position, year, pa, war, off, def, bsr 
                                 FROM Player_YearlyWar
                                 WHERE mlbId=?

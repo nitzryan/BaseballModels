@@ -6,26 +6,28 @@ from torch.optim import lr_scheduler
 from tqdm import tqdm
 import sys
 
-from Player_Prep import Generate_Pitchers, Generate_Pitcher_Mutators, Generate_Test_Train
+from Player_Prep import Init_Pitchers, Generate_Pitchers, Generate_Pitcher_Mutators, Generate_Test_Train
 from Model import RNN_Model, RNN_Classification_Loss
 from Constants import device
 from Model_Train import trainAndGraph
 from Dataset import PitcherDataset
 
 from Output import Delete_Model_Run_Pitcher, Generate_Model_Run_Pitcher, Setup_Pitchers
-from Constants import db
+from Constants import db, p_init_components, p_park_components, p_person_components, p_pitching_components
 
 cursor = db.cursor()
 all_pitcher_ids = cursor.execute("SELECT mlbId FROM Model_Players WHERE isHitter='0'").fetchall()
+year = int(sys.argv[1])
+Init_Pitchers(year)
 # Data for savings tests
 xs = []
 losses = []
 
 # Create Input, Output Data
-pitching_components = 5
-park_components = 2
-person_components = 3
-init_components = 3
+pitching_components = p_pitching_components
+park_components = p_park_components
+person_components = p_person_components
+init_components = p_init_components
 
 input_size = pitching_components + park_components + person_components + init_components
 
@@ -43,7 +45,10 @@ park_scale = 0.1
 signing_age_scale = 0.5
 
 batch_size = 800
-max_input_size = 79
+max_input_size = 0
+for i in pitcher_input:
+    if i.shape[0] > max_input_size:
+        max_input_size = i.shape[0]
 
 # for x_var in tqdm(np.arange(0.01, 1.0, 0.01), desc="Mutator Options", leave=True):
     # test_size = x_var
@@ -65,12 +70,32 @@ test_pitchers_dataset = PitcherDataset(x_test_padded, test_lengths, y_test_padde
 
 # Train Model
 dropout_perc = 0.0
-num_layers = 5
+num_layers = 3
 hidden_size = 30
 
 Setup_Pitchers(all_pitcher_ids, pitcher_ids)
 
-for n in tqdm(range(int(sys.argv[1]))):
+model_name = sys.argv[2]
+
+cursor = db.cursor()
+cursor.execute(f'''DELETE FROM Model_TrainingHistory 
+               WHERE Year=? 
+               AND IsHitter="0" 
+               AND ModelName LIKE "{model_name}%"''', (year,))
+db.commit()
+cursor = db.cursor()
+
+# Get the next model idx
+last_model_idx = cursor.execute("SELECT DISTINCT ModelIdx FROM Model_TrainingHistory ORDER BY ModelIdx DESC LIMIT 1").fetchone()
+if last_model_idx == None:
+    model_idx = 1
+else:
+    model_idx = last_model_idx[0] + 1
+
+training_generator = torch.utils.data.DataLoader(train_pitchers_dataset, batch_size=batch_size, shuffle=True)
+testing_generator = torch.utils.data.DataLoader(test_pitchers_dataset, batch_size=batch_size, shuffle=False)
+
+for n in tqdm(range(int(sys.argv[3])), desc="Model Training Iterations"):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, pitching_mutators)
     network = network.to(device)
 
@@ -79,10 +104,21 @@ for n in tqdm(range(int(sys.argv[1]))):
     loss_function = RNN_Classification_Loss
 
     num_epochs = 300
-    training_generator = torch.utils.data.DataLoader(train_pitchers_dataset, batch_size=batch_size, shuffle=True)
-    testing_generator = torch.utils.data.DataLoader(test_pitchers_dataset, batch_size=batch_size, shuffle=False)
+    
 
-    loss = trainAndGraph(network, training_generator, testing_generator, loss_function, optimizer, scheduler, num_epochs, 10, early_stopping_cutoff=40, should_output=False)
-    model = f"test_run_pitchers_{n}"
-    Delete_Model_Run_Pitcher(model)
-    Generate_Model_Run_Pitcher(model, network, device, leave_progress=False)
+    this_model_name = model_name + '_' + str(n) + '.pt'
+    loss = trainAndGraph(network, 
+                         training_generator, 
+                         testing_generator, 
+                         loss_function, 
+                         optimizer, 
+                         scheduler, 
+                         num_epochs, 
+                         10, 
+                         early_stopping_cutoff=40, 
+                         should_output=False,
+                         model_name="Models/" + this_model_name)
+    
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO Model_TrainingHistory VALUES(?,?,?,ROUND(?,3),?,?,?)", (this_model_name, year, False, loss, num_layers, hidden_size, model_idx))
+    db.commit()

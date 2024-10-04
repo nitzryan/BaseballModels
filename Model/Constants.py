@@ -17,3 +17,8 @@ h_stealing_components = 1
 h_park_components = 2
 h_person_components = 3
 h_init_components = 3
+
+p_pitching_components = 5
+p_park_components = 2
+p_person_components = 3
+p_init_components = 3

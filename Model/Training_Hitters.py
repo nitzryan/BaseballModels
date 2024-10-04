@@ -101,7 +101,10 @@ if last_model_idx == None:
 else:
     model_idx = last_model_idx[0] + 1
 
-for n in tqdm(range(int(sys.argv[3]))):
+training_generator = torch.utils.data.DataLoader(train_hitters_dataset, batch_size=batch_size, shuffle=True)
+testing_generator = torch.utils.data.DataLoader(test_hitters_dataset, batch_size=batch_size, shuffle=False)
+
+for n in tqdm(range(int(sys.argv[3])), desc="Model Training Iterations"):
     network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, hitting_mutators)
     network = network.to(device)
 
@@ -110,8 +113,7 @@ for n in tqdm(range(int(sys.argv[3]))):
     loss_function = RNN_Classification_Loss
 
     num_epochs = 300
-    training_generator = torch.utils.data.DataLoader(train_hitters_dataset, batch_size=batch_size, shuffle=True)
-    testing_generator = torch.utils.data.DataLoader(test_hitters_dataset, batch_size=batch_size, shuffle=False)
+    
 
     this_model_name = model_name + '_' + str(n) + '.pt'
     loss = trainAndGraph(network, 

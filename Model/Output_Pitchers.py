@@ -2,8 +2,8 @@ import sys
 import sqlite3
 import torch
 from tqdm import tqdm
-from Player_Prep import Init_Hitters, Generate_Hitters, Transform_Hitter
-from Constants import h_fielding_components, h_hitting_components, h_init_components, h_park_components, h_person_components, h_stealing_components
+from Player_Prep import Init_Pitchers, Generate_Pitchers, Transform_Pitcher
+from Constants import p_init_components, p_park_components, p_person_components, p_pitching_components
 from Model import RNN_Model
 from Dataset import WAR_BUCKETS
 
@@ -32,32 +32,32 @@ db.commit()
 cursor = db.cursor()
 
 # Initialize the model so that the scalar and pca are setup with the same values
-Init_Hitters(models[0][1])
-Generate_Hitters(h_fielding_components, h_hitting_components, h_stealing_components, h_park_components, h_person_components)
+Init_Pitchers(models[0][1])
+Generate_Pitchers(p_pitching_components, p_park_components, p_person_components)
 
-## Prepare Hitter Input
+## Prepare Pitcher Input
 ids = cursor.execute('''
                             SELECT DISTINCT pcs.mlbId
                             FROM Player_CareerStatus AS pcs
                             INNER JOIN Player AS p ON pcs.mlbId = p.mlbId
-                            WHERE isHitter IS NOT NULL
+                            WHERE isPitcher IS NOT NULL
                             AND birthYear IS NOT NULL
                             AND careerStartYear>=?
                             ''', (2005,)).fetchall()
 
-hitter_inputs = []
-for id, in tqdm(ids, desc="Creating Hitter Input Data", leave=False):
-    hitter_data = cursor.execute('''
+pitcher_inputs = []
+for id, in tqdm(ids, desc="Creating Pitcher Input Data", leave=False):
+    pitcher_data = cursor.execute('''
                                         SELECT mlbId, 
                                         signingAge(birthYear, birthMonth, birthDate, signingYear, signingMonth, signingDate),
                                         draftPick
                                         FROM Player WHERE mlbId=?
                                         ''', (id,)).fetchone()
-    hitter_input, _ = Transform_Hitter(hitter_data)
-    hitter_inputs.append(hitter_input)
+    pitcher_input, _ = Transform_Pitcher(pitcher_data)
+    pitcher_inputs.append(pitcher_input)
     
 # Create Models
-input_size = hitter_inputs[0].shape[1]
+input_size = pitcher_inputs[0].shape[1]
 networks = []
 for model, _, hidden_size, num_layers, _ in tqdm(models, desc="Creating Networks", leave=False):
     network = RNN_Model(input_size, num_layers, hidden_size, 0, [])
@@ -65,9 +65,9 @@ for model, _, hidden_size, num_layers, _ in tqdm(models, desc="Creating Networks
     network.eval()
     networks.append(network)
 
-## Iterate each hitter through each model
+## Iterate each pitcher through each model
 cursor.execute("BEGIN TRANSACTION")
-for i, input_data in tqdm(enumerate(hitter_inputs), desc="Evaluating Players on each model", leave=False, total=len(hitter_inputs)):
+for i, input_data in tqdm(enumerate(pitcher_inputs), desc="Evaluating Players on each model", leave=False, total=len(pitcher_inputs)):
     input_length = input_data.shape[0]
     war_values = torch.zeros((len(networks), input_length, WAR_BUCKETS.shape[0]))
     for j, network in enumerate(networks):
@@ -82,7 +82,7 @@ for i, input_data in tqdm(enumerate(hitter_inputs), desc="Evaluating Players on 
     #print(war_values.shape)
     #print(war_avgs)
     mlbId = ids[i][0]
-    output_dates = [(0,0)] + cursor.execute("SELECT Year, Month FROM Model_HitterStats WHERE mlbId=? ORDER BY Year ASC, Month ASC", (mlbId,)).fetchall()
+    output_dates = [(0,0)] + cursor.execute("SELECT Year, Month FROM Model_PitcherStats WHERE mlbId=? ORDER BY Year ASC, Month ASC", (mlbId,)).fetchall()
     #print(len(output_dates))
     
     for n, (year, month) in enumerate(output_dates):

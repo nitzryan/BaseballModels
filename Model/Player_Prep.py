@@ -42,7 +42,7 @@ def Init_Hitters(year : int):
     global age_std
     global log_picks_mean
     global log_picks_std
-    age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data()
+    age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data(hitters)
 
 pitchers = None
 def Init_Pitchers(year : int):
@@ -50,21 +50,28 @@ def Init_Pitchers(year : int):
     cutoff_year = year - CUTOFF_YEAR_DIF
     pitchers = cursor.execute('''
                             SELECT mp.mlbId, mp.ageAtSigningYear, p.draftPick
-                            FROM Model_Players AS mp
-                            INNER JOIN Player as p ON mp.mlbId = p.mlbId
-                            WHERE mp.isPitcher='1'
-                            AND p.position='pitching'
-                            AND pcs.careerStartYear<=?
-                            ORDER BY mp.mlbId
+                         FROM Model_Players AS mp
+                         INNER JOIN Player as p ON mp.mlbId = p.mlbId
+                         INNER JOIN Player_CareerStatus AS pcs ON mp.mlbId = pcs.mlbId
+                         WHERE mp.isPitcher='1'
+                         AND pcs.careerStartYear<=?
+                         AND p.position='pitching'
+                         ORDER BY mp.mlbId
                             ''', (cutoff_year,)).fetchall()
+    
+    global age_mean
+    global age_std
+    global log_picks_mean
+    global log_picks_std
+    age_mean, age_std, log_picks_mean, log_picks_std = Get_Age_Draft_Data(pitchers)
 
 # Get Age and draft pick, which are done differently than other stats
 SIGNING_COMPONENTS = 3
-def Get_Age_Draft_Data():
+def Get_Age_Draft_Data(players):
     ages = []
     picks = []
 
-    for _, signingAge, draftPick in hitters:
+    for _, signingAge, draftPick in players:
         ages.append(signingAge)
         if draftPick == None:
             picks.append(NOT_DRAFTED_VALUE)

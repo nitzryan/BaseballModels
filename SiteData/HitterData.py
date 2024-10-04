@@ -14,9 +14,16 @@ ids = cursor.execute('''SELECT DISTINCT o.mlbId
 for id, in tqdm(ids):
     data = {"models_hitter":[]}
     # Go Model by Model
-    models = cursor.execute("SELECT DISTINCT modelIdx FROM Output_PlayerWar WHERE mlbId=?", (id,)).fetchall()
+    models = cursor.execute('''
+                            SELECT DISTINCT opw.modelIdx
+                            FROM Output_PlayerWar AS opw
+                            INNER JOIN Model_TrainingHistory AS mth
+                            ON opw.ModelIdx=mth.ModelIdx
+                            WHERE opw.mlbId=?
+                            AND mth.IsHitter=?''', (id,True)).fetchall()
     for n, (model,) in enumerate(models):
-        this_model = {"name":model, "data":[], "tainted":False}
+        model_full_name = cursor.execute("SELECT ModelName FROM Model_TrainingHistory WHERE ModelIdx=? LIMIT 1", (model,)).fetchone()[0].split('_')[0]
+        this_model = {"name":model_full_name, "data":[], "tainted":False}
         resultData = cursor.execute("SELECT year, month FROM Output_PlayerWar WHERE mlbId=? AND modelIdx=? ORDER BY year ASC, month ASC", (id, model)).fetchall()
         for year, month in resultData:
             wars = cursor.execute("SELECT prob0, prob1, prob2, prob3, prob4, prob5, prob6 FROM Output_PlayerWar WHERE mlbId=? AND modelIdx=? AND year=? AND month=?", (id, model, year, month)).fetchone()
@@ -25,7 +32,7 @@ for id, in tqdm(ids):
             
         data["models_hitter"].append(this_model)
             
-    statsData = cursor.execute("SELECT year, month FROM Player_Hitter_MonthAdvanced WHERE mlbId=? ORDER BY year ASC, month ASC, levelId ASC, teamId ASC", (id,)).fetchall()
+    statsData = cursor.execute("SELECT DISTINCT year, month FROM Player_Hitter_MonthAdvanced WHERE mlbId=? ORDER BY year ASC, month ASC", (id,)).fetchall()
     
     all_stats = []
     last_year = 0
@@ -70,7 +77,7 @@ for id, in tqdm(ids):
     
     # Generate Data for end of rookie and service eligibility
     try:
-        rookie_year, rookie_month = cursor.execute("SELECT year, month FROM Player_RookieEligibility WHERE mlbId=?", (id,)).fetchone()
+        rookie_year, rookie_month = cursor.execute("SELECT mlbRookieYear, mlbRookieMonth FROM Player_CareerStatus WHERE mlbId=?", (id,)).fetchone()
         data["rookie_year"] = rookie_year
         data["rookie_month"] = rookie_month
     except:
