@@ -7,7 +7,7 @@ from tqdm import tqdm
 import sys
 
 from Player_Prep import Init_Pitchers, Generate_Pitchers, Generate_Pitcher_Mutators, Generate_Test_Train
-from Model import RNN_Model, RNN_Classification_Loss
+from Model import RNN_Model, LSTM_Model, RNN_Classification_Loss
 from Constants import device
 from Model_Train import trainAndGraph
 from Dataset import PitcherDataset
@@ -96,7 +96,7 @@ training_generator = torch.utils.data.DataLoader(train_pitchers_dataset, batch_s
 testing_generator = torch.utils.data.DataLoader(test_pitchers_dataset, batch_size=batch_size, shuffle=False)
 
 for n in tqdm(range(int(sys.argv[3])), desc="Model Training Iterations"):
-    network = RNN_Model(input_size, num_layers, hidden_size, dropout_perc, pitching_mutators)
+    network = LSTM_Model(input_size, num_layers, hidden_size, dropout_perc, pitching_mutators)
     network = network.to(device)
 
     optimizer = torch.optim.Adam(network.parameters(), lr=0.003)

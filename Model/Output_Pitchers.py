@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 from Player_Prep import Init_Pitchers, Generate_Pitchers, Transform_Pitcher
 from Constants import p_init_components, p_park_components, p_person_components, p_pitching_components
-from Model import RNN_Model
+from Model import RNN_Model, LSTM_Model
 from Dataset import WAR_BUCKETS
 
 def _Get_Signing_Age(birth_year, birth_month, birth_date, signing_year, signing_month, signing_date):
@@ -60,14 +60,15 @@ for id, in tqdm(ids, desc="Creating Pitcher Input Data", leave=False):
 input_size = pitcher_inputs[0].shape[1]
 networks = []
 for model, _, hidden_size, num_layers, _ in tqdm(models, desc="Creating Networks", leave=False):
-    network = RNN_Model(input_size, num_layers, hidden_size, 0, [])
+    #network = RNN_Model(input_size, num_layers, hidden_size, 0, [])
+    network = LSTM_Model(input_size, num_layers, hidden_size, 0, [])
     network.load_state_dict(torch.load('Models/' + model))
     network.eval()
     networks.append(network)
 
 ## Iterate each pitcher through each model
 cursor.execute("BEGIN TRANSACTION")
-for i, input_data in tqdm(enumerate(pitcher_inputs), desc="Evaluating Players on each model", leave=False, total=len(pitcher_inputs)):
+for i, input_data in tqdm(enumerate(pitcher_inputs), desc="Evaluating Pitchers on each model", leave=False, total=len(pitcher_inputs)):
     input_length = input_data.shape[0]
     war_values = torch.zeros((len(networks), input_length, WAR_BUCKETS.shape[0]))
     for j, network in enumerate(networks):

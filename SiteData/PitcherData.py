@@ -11,7 +11,7 @@ ids = cursor.execute('''SELECT DISTINCT o.mlbId
                      INNER JOIN Model_TrainingHistory AS m
                      ON o.modelIdx = m.ModelIdx
                      WHERE m.IsHitter="0"''').fetchall()
-for id, in tqdm(ids):
+for id, in tqdm(ids, desc="Creating Pitcher JSON Data"):
     data = {"models_pitcher":[]}
     # Go Model by Model
     models = cursor.execute('''
@@ -22,7 +22,7 @@ for id, in tqdm(ids):
                             WHERE opw.mlbId=?
                             AND mth.IsHitter=?''', (id,False)).fetchall()
     for n, (model,) in enumerate(models):
-        model_full_name = cursor.execute("SELECT ModelName FROM Model_TrainingHistory WHERE ModelIdx=? LIMIT 1", (model,)).fetchone()[0].split('_')[0]
+        model_full_name = cursor.execute("SELECT ModelName FROM Model_TrainingHistory WHERE ModelIdx=? LIMIT 1", (model,)).fetchone()[0].split('_P_')[0]
         this_model = {"name":model_full_name, "data":[], "tainted":False}
         resultData = cursor.execute("SELECT year, month FROM Output_PlayerWar WHERE mlbId=? AND modelIdx=? ORDER BY year ASC, month ASC", (id, model)).fetchall()
         for year, month in resultData:
