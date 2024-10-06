@@ -14,6 +14,7 @@ from Model_Players import Model_Players
 from Model_MonthStats import Model_MonthStats
 from Model_PlayerWar import Model_PlayerWar
 from Annual_Stats import Annual_Stats
+from Update_ParentMap import Update_Parent_Map, Update_Parents
 
 if __name__ == '__main__':
     year = int(sys.argv[1])
@@ -24,17 +25,19 @@ if __name__ == '__main__':
         Update_Careers(db, year, month)
         exit(0)
     
-    Get_Players(db, year)
-    Update_Hitter_GameLogs(db, year, month)
-    Update_Pitcher_GameLogs(db, year, month)
-    Update_Park_Factors(db, year)
-    Calculate_LevelStats(db, year, month)
-    Calculate_Hitter_MonthStats(db, year, month)
-    Calculate_Pitcher_MonthStats(db, year, month)
-    Calculate_Ratios(db, year, month)
-    Annual_Stats(db, year)
+    # Get_Players(db, year)
+    # Update_Hitter_GameLogs(db, year, month)
+    # Update_Pitcher_GameLogs(db, year, month)
+    # Update_Park_Factors(db, year)
+    # Calculate_LevelStats(db, year, month)
+    # Calculate_Hitter_MonthStats(db, year, month)
+    # Calculate_Pitcher_MonthStats(db, year, month)
+    # Calculate_Ratios(db, year, month)
+    # Annual_Stats(db, year)
+    # Update_Parent_Map(db, year)
+    Update_Parents(db)
     
-    Update_Careers(db, year, month)
-    Model_Players(db, year, month)
-    Model_PlayerWar(db)
-    Model_MonthStats(db)
+    # Update_Careers(db, year, month)
+    # Model_Players(db, year, month)
+    # Model_PlayerWar(db)
+    # Model_MonthStats(db)
