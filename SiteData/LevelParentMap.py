@@ -7,10 +7,17 @@ db = sqlite3.connect("../BaseballStats.db")
 cursor = db.cursor()
 teams = cursor.execute("SELECT * FROM Team_Parents").fetchall()
 team_orgs = cursor.execute("SELECT * FROM Team_OrganizationMap").fetchall()
+years = cursor.execute("SELECT DISTINCT year FROM Team_OrganizationMap ORDER BY year ASC").fetchall()
 
 map = {"teams":{}, "orgs":{}}
 for id, abbr, name in teams:
     map["orgs"][id] = {"abbr":abbr, "name":name}
+    
+    # Need to map mlb teams to self
+    for year, in years:
+        if not id in map["teams"].keys():
+            map["teams"][id] = {"years":{}}
+        map["teams"][id]["years"][year] = id
     
 for id, year, parentId in team_orgs:
     if not id in map["teams"].keys():
