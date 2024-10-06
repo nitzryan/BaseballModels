@@ -33,6 +33,10 @@ def Update_Parent_Map(db : sqlite3.Connection, year : int) -> None:
                 id = team["id"]
                 parent_id = team["parentOrgId"]
                 cursor.execute("INSERT INTO Team_OrganizationMap VALUES(?,?,?)", (id, year, parent_id))
+            
+                # Check if parent org maps to self this year
+                if cursor.execute("SELECT COUNT(*) FROM Team_OrganizationMap WHERE teamId=? AND year=?", (parent_id, year)).fetchone()[0] == 0:
+                    cursor.execute("INSERT INTO Team_OrganizationMap VALUES(?,?,?)", (parent_id, year, parent_id))
             except: # Team doesn't have a parent org
                 continue
             

@@ -13,12 +13,6 @@ map = {"teams":{}, "orgs":{}}
 for id, abbr, name in teams:
     map["orgs"][id] = {"abbr":abbr, "name":name}
     
-    # Need to map mlb teams to self
-    for year, in years:
-        if not id in map["teams"].keys():
-            map["teams"][id] = {"years":{}}
-        map["teams"][id]["years"][year] = id
-    
 for id, year, parentId in team_orgs:
     if not id in map["teams"].keys():
         map["teams"][id] = {"years":{}}

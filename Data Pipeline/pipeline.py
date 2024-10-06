@@ -34,7 +34,7 @@ if __name__ == '__main__':
     # Calculate_Pitcher_MonthStats(db, year, month)
     # Calculate_Ratios(db, year, month)
     # Annual_Stats(db, year)
-    # Update_Parent_Map(db, year)
+    Update_Parent_Map(db, year)
     Update_Parents(db)
     
     # Update_Careers(db, year, month)
