@@ -22,8 +22,18 @@ def Generate_Top_100(db : sqlite3.Connection, year : int, month : int) -> None:
         model_map = {"name":model_name, "players":[]}
         for id, war in players:
             firstName, lastName = cursor.execute("SELECT DISTINCT useFirstName, useLastName FROM Player WHERE mlbId=?", (id,)).fetchone()
-            # Add something for org id later
-            this_player = {"first":firstName, "last":lastName, "id":id, "war":round(war, 1)}
+            try:
+                org_id = cursor.execute('''
+                                        SELECT parentOrgId 
+                                        FROM Player_OrgMap 
+                                        WHERE mlbId=? 
+                                        AND (year=? AND month<=?)
+                                        OR (year<?)
+                                        ORDER BY Year DESC, Month DESC''', (id, year, month, year)).fetchone()[0]
+            except:
+                print(f"No Org Id Found for {firstName} {lastName} {year} {month}")
+                org_id = 11
+            this_player = {"first":firstName, "last":lastName, "id":id, "war":round(war, 1), "orgId":org_id}
             model_map["players"].append(this_player)
         
         data["models"].append(model_map)

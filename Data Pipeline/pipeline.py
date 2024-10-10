@@ -15,6 +15,7 @@ from Model_MonthStats import Model_MonthStats
 from Model_PlayerWar import Model_PlayerWar
 from Annual_Stats import Annual_Stats
 from Update_ParentMap import Update_Parent_Map, Update_Parents
+from Generate_PlayerOrgMap import Generate_PlayerOrgMap
 
 if __name__ == '__main__':
     year = int(sys.argv[1])
@@ -34,8 +35,9 @@ if __name__ == '__main__':
     # Calculate_Pitcher_MonthStats(db, year, month)
     # Calculate_Ratios(db, year, month)
     # Annual_Stats(db, year)
-    Update_Parent_Map(db, year)
-    Update_Parents(db)
+    #Update_Parent_Map(db, year)
+    #Update_Parents(db)
+    Generate_PlayerOrgMap(db)
     
     # Update_Careers(db, year, month)
     # Model_Players(db, year, month)
