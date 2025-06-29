@@ -509,8 +509,6 @@ def _Update_Signing_Year(db : sqlite3.Connection):
     cursor.execute("END TRANSACTION")
     db.commit()
     
-# This function will only be called on year end, as it only updates statuses that change
-# At the end of a season
 def Update_Careers(db : sqlite3.Connection, year : int, month : int) -> None:
     cursor = db.cursor()
     cursor.execute("DELETE FROM Player_CareerStatus")

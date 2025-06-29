@@ -26,6 +26,10 @@ def Generate_Team_50(db : sqlite3.Connection, year : int, month : int) -> None:
                                     ORDER BY warCalculation(prob0, prob1, prob2, prob3, prob4, prob5, prob6) DESC
                                     LIMIT 50
                                     ''', (hitter_idx, pitcher_idx, year, month, team_id)).fetchall()
+            
+            if len(players) == 0:
+                return
+            
             model_map = {"name":model_name, "players":[]}
             for id, war in players:
                 firstName, lastName = cursor.execute("SELECT DISTINCT useFirstName, useLastName FROM Player WHERE mlbId=?", (id,)).fetchone()
@@ -40,6 +44,6 @@ def Generate_Team_50(db : sqlite3.Connection, year : int, month : int) -> None:
         
 if __name__ == "__main__":
     db = sqlite3.connect("../BaseballStats.db")
-    for year in tqdm(range(2021, 2025), desc="Years", leave=False):
+    for year in tqdm(range(2021, 2026), desc="Years", leave=False):
         for month in tqdm(range(4, 10), desc="Months", leave=False):
             Generate_Team_50(db, year, month)

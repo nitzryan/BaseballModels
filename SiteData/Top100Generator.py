@@ -20,6 +20,10 @@ def Generate_Top_100(db : sqlite3.Connection, year : int, month : int) -> None:
                                  LIMIT 100
                                  ''', (hitter_idx, pitcher_idx, year, month)).fetchall()
         model_map = {"name":model_name, "players":[]}
+        
+        if len(players) == 0:
+                return
+        
         for id, war in players:
             firstName, lastName = cursor.execute("SELECT DISTINCT useFirstName, useLastName FROM Player WHERE mlbId=?", (id,)).fetchone()
             try:
@@ -44,6 +48,6 @@ def Generate_Top_100(db : sqlite3.Connection, year : int, month : int) -> None:
         
 if __name__ == "__main__":
     db = sqlite3.connect("../BaseballStats.db")
-    for year in tqdm(range(2021, 2025), desc="Years", leave=False):
+    for year in tqdm(range(2021, 2026), desc="Years", leave=False):
         for month in tqdm(range(4, 10), desc="Months", leave=False):
             Generate_Top_100(db, year, month)

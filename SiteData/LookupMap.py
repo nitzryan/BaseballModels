@@ -37,6 +37,9 @@ for id, firstName, lastName in playerData:
                               WHERE mlbId=?
                               ORDER BY year ASC
                               ''', (id,id)).fetchall()
+    
+    if len(allYears) == 0:
+        continue
     firstTotalYear = allYears[0][0]
     lastTotalYear = allYears[-1][0]
     

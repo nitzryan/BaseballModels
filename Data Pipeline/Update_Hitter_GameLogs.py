@@ -15,7 +15,7 @@ def _GenerateHitterYearGameLogs(db : sqlite3.Connection, threadIdx, mlbId, year,
     global threadData
     cursor = db.cursor()
     # Check if data already exists
-    if cursor.execute(f"SELECT COUNT(*) FROM Player_Hitter_GameLog WHERE mlbId='{mlbId}' AND Year='{year}' AND Month >='{startMonth}'").fetchone()[0] > 0:
+    if cursor.execute(f"SELECT COUNT(*) FROM Player_Hitter_GameLog WHERE mlbId='{mlbId}' AND Year='{year}' AND (Month ='{startMonth}' OR Month='{endMonth}')").fetchone()[0] > 0:
         return
     
     response = requests.get(f"https://statsapi.mlb.com/api/v1/people/{mlbId}/stats?stats=gameLog&leagueListId=mlb_milb&group=hitting&gameType=R&sitCodes=1,2,3,4,5,6,7,8,9,10,11,12&hydrate=team&language=en&season={year}")

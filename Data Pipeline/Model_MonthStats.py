@@ -86,7 +86,6 @@ def _Fill_HitterGaps(db : sqlite3.Connection):
         statDates = cursor.execute("SELECT Year, Month FROM Model_HitterStats WHERE mlbId=? ORDER BY Year ASC, Month ASC", (id,)).fetchall()
         birthYear, birthMonth, birthDate = cursor.execute("SELECT BirthYear, BirthMonth, BirthDate FROM Player WHERE mlbId=?", (id,)).fetchone()
         
-        currentStatIdx = 0
         currentMonth = statDates[0][1] - 1
         currentYear = statDates[0][0]
         for year, month in statDates:
@@ -97,11 +96,15 @@ def _Fill_HitterGaps(db : sqlite3.Connection):
             
             if currentMonth != month or currentYear != year:
                 # Get last level
-                level = levelMap[cursor.execute("SELECT Level FROM Player_Hitter_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
+                try:
+                    level = levelMap[cursor.execute("SELECT Level FROM Player_Hitter_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
+                except:
+                    level = 6 # Rookie ball, for players just drafted but not played
+                
                 while currentMonth != month or currentYear != year:
                     rookie_ball_check = (level < 5) or (currentMonth > 5 and currentMonth < 9)
                     minors_check = (level == 0) or (currentMonth > 4 and currentMonth < 9)
-                    if currentYear != 2020 and rookie_ball_check and minors_check: # Covid Check
+                    if currentYear != 2020 and rookie_ball_check and minors_check: # Don't log data for players where league isn't playing
                         # Add entry
                         currentAge = (currentYear + currentMonth/12) - (birthYear + birthMonth/12 + birthDate/365)
                         cursor.execute("INSERT INTO Model_HitterStats VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -117,6 +120,34 @@ def _Fill_HitterGaps(db : sqlite3.Connection):
                         
             currentMonth = month
             currentYear = year
+
+        currentMonth += 1
+        if currentMonth > LAST_MONTH:
+            currentMonth = START_MONTH
+            currentYear += 1
+        # Put entries between last played time and end of prospect status
+        lastYear, lastMonth = cursor.execute("SELECT lastProspectYear, lastProspectMonth FROM Model_Players WHERE mlbId=?", (id,)).fetchone()
+        while (currentYear < lastYear or (currentYear == lastYear and currentMonth <= lastMonth)):
+            # Get last level
+            try:
+                level = levelMap[cursor.execute("SELECT Level FROM Player_Hitter_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
+            except:
+                level = 6 # Rookie ball, for players just drafted but not played
+            
+            rookie_ball_check = (level < 5) or (currentMonth > 5 and currentMonth < 9)
+            minors_check = (level == 0) or (currentMonth > 4 and currentMonth < 9)
+            if currentYear != 2020 and rookie_ball_check and minors_check: # Don't log data for players where league isn't playing
+                # Add entry
+                currentAge = (currentYear + currentMonth/12) - (birthYear + birthMonth/12 + birthDate/365)
+                cursor.execute("INSERT INTO Model_HitterStats VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (id, currentYear, currentMonth, currentAge, 0, level,
+                                1,1,1,1,1,1,1,1,1,1,1,
+                                0,0,0,0,0,0,0,0,0))
+                
+            currentMonth += 1
+            if currentMonth > LAST_MONTH:
+                currentMonth = START_MONTH
+                currentYear += 1
 
     cursor.execute("END TRANSACTION")
     db.commit()
@@ -199,7 +230,6 @@ def _Fill_PitcherGaps(db : sqlite3.Connection):
         statDates = cursor.execute("SELECT Year, Month FROM Model_PitcherStats WHERE mlbId=? ORDER BY Year ASC, Month ASC", (id,)).fetchall()
         birthYear, birthMonth, birthDate = cursor.execute("SELECT BirthYear, BirthMonth, BirthDate FROM Player WHERE mlbId=?", (id,)).fetchone()
         
-        currentStatIdx = 0
         currentMonth = statDates[0][1] - 1
         currentYear = statDates[0][0]
         for year, month in statDates:
@@ -210,8 +240,11 @@ def _Fill_PitcherGaps(db : sqlite3.Connection):
             
             if currentMonth != month or currentYear != year:
                 # Get last level
+                try:
+                    level = level = levelMap[cursor.execute("SELECT Level FROM Player_Pitcher_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
+                except:
+                    level = 6 # Rookie ball, for players just drafted but not played
                 
-                level = levelMap[cursor.execute("SELECT Level FROM Player_Pitcher_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
                 while currentMonth != month or currentYear != year:
                     rookie_ball_check = (level < 5) or (currentMonth > 5 and currentMonth < 9)
                     minors_check = (level == 0) or (currentMonth > 4 and currentMonth < 9)
@@ -231,6 +264,38 @@ def _Fill_PitcherGaps(db : sqlite3.Connection):
                         
             currentMonth = month
             currentYear = year
+
+        currentMonth += 1
+        if currentMonth > LAST_MONTH:
+            currentMonth = START_MONTH
+            currentYear += 1
+        
+        lastYear, lastMonth = cursor.execute("SELECT lastProspectYear, lastProspectMonth FROM Model_Players WHERE mlbId=?", (id,)).fetchone()
+        # Put entries between last played time and end of prospect status
+        while (currentYear < lastYear or (currentYear == lastYear and currentMonth <= lastMonth)):
+            # Get last level
+            try:
+                level = levelMap[cursor.execute("SELECT Level FROM Player_Pitcher_GameLog WHERE mlbId=? AND ((Year<=? AND Month<=?) OR Year<?) ORDER BY Year DESC, Month DESC, Day DESC LIMIT 1", (id, currentYear, currentMonth, currentYear)).fetchone()[0]]
+            except:
+                level = 6 # Rookie ball, for players just drafted but not played
+            
+            rookie_ball_check = (level < 5) or (currentMonth > 5 and currentMonth < 9)
+            minors_check = (level == 0) or (currentMonth > 4 and currentMonth < 9)
+            
+            if (id == 805792):
+                print((level, rookie_ball_check, minors_check))
+            if currentYear != 2020 and rookie_ball_check and minors_check: # Don't log data for players where league isn't playing
+                # Add entry
+                currentAge = (currentYear + currentMonth/12) - (birthYear + birthMonth/12 + birthDate/365)
+                cursor.execute("INSERT INTO Model_PitcherStats VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                    (id, currentYear, currentMonth, currentAge, 0, level,
+                                        1,1,1,1,1,1,1,1,1)
+                                    )
+                
+            currentMonth += 1
+            if currentMonth > LAST_MONTH:
+                currentMonth = START_MONTH
+                currentYear += 1
 
     cursor.execute("END TRANSACTION")
     db.commit()
